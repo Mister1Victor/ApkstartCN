@@ -161,16 +161,16 @@
           <h2>Install Android to a virtual disk</h2>
           <p class="guide-sub">The virtual machine window is open. Complete these six steps once. ApkStart will then boot directly from the disk without needing the image again.</p>
           <ol class="guide-list">
-            <li><b>Boot menu</b>：用 <kbd>↓</kbd> select <code>Installation - Install Android-x86 to harddisk</code>，回车</li>
-            <li><b>Choose Partition</b>：选 <code>Create/Modify partitions</code>；询问是否使用 GPT 时选 <code>No</code></li>
-            <li><b>cfdisk 分区</b>：<code>New</code> → <code>Primary</code> → 容量直接回车 → <code>Bootable</code> → <code>Write</code> → 输入 <code>yes</code> → <code>Quit</code></li>
-            <li><b>Format</b>：选 <code>vda1</code> → 提示格式化时选 <code>ext4</code> → <code>Yes</code></li>
-            <li><b>Bootloader & system</b>：<code>Install GRUB</code> 选 <code>Yes</code>；<code>Install /system as read-write</code> 选 <code>Yes</code></li>
-            <li><b>Done</b>：进度到 100% 后点下面的「我已安装完成」（ApkStart 会自动重启并接管）</li>
+            <li><b>Boot menu</b>: use <kbd>↓</kbd> to select <code>Installation - Install Android-x86 to harddisk</code>, then press Enter.</li>
+            <li><b>Choose Partition</b>: select <code>Create/Modify partitions</code>; when asked whether to use GPT, select <code>No</code>.</li>
+            <li><b>cfdisk partition</b>: <code>New</code> → <code>Primary</code> → press Enter for the default size → <code>Bootable</code> → <code>Write</code> → type <code>yes</code> → <code>Quit</code>.</li>
+            <li><b>Format</b>: select <code>vda1</code> → choose <code>ext4</code> when prompted → <code>Yes</code>.</li>
+            <li><b>Bootloader & system</b>: choose <code>Yes</code> for both <code>Install GRUB</code> and <code>Install /system as read-write</code>.</li>
+            <li><b>Done</b>: when progress reaches 100%, click “Installation complete” below. ApkStart will restart and take over automatically.</li>
           </ol>
-          <p class="guide-tip">如果之后提示 adb 未连接：在虚拟机窗口按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F1</kbd> 进入终端，执行
+          <p class="guide-tip">If adb is not connected afterward, press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F1</kbd> in the VM window to open a terminal, then run
             <code>setprop service.adb.tcp.port 5555</code>、<code>stop adbd</code>、<code>start adbd</code>，
-            再按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F7</kbd> 回到图形界面。</p>
+            Then press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F7</kbd> to return to the graphical interface.</p>
           <div class="guide-foot">
             <button class="btn primary" id="btnMarkInstalled">Installation complete</button>
             <button class="btn ghost" id="btnGuideClose">Maybe later</button>
@@ -222,7 +222,7 @@
             <option value="window">Portrait window (resizable; remembers each app’s size)</option>
             <option value="fullscreen">Fullscreen (fills the screen while preserving phone aspect ratio)</option>
           </select>
-          <span class="sub">随时按 <b>F11</b> 或右键托盘切换；全屏只放大窗口，不改变画面比例，切换不重启应用。</span>
+          <span class="sub">Press <b>F11</b> or right-click the tray icon to switch at any time. Fullscreen enlarges the window without changing the aspect ratio; switching does not restart the app.</span>
         </div>
         <div class="field" id="portraitField">
           <label>Portrait resolution</label>
@@ -330,7 +330,7 @@
         <div class="field switch-field">
           <div>
             <label>Keep quick-boot snapshot (recommended)</label>
-            <span class="sub">第二次打开应用只要几秒，代价是磁盘上多一份约 2–3 GB 的 <code>ram.bin</code>. Disable this if disk space is limited; it affects startup speed only, not apps or saves.</span>
+            <span class="sub">Subsequent launches take only seconds, at the cost of an extra 2–3 GB <code>ram.bin</code> file. Disable this if disk space is limited; it affects startup speed only, not apps or saves.</span>
           </div>
           <input type="checkbox" id="setKeepSnapshot" class="switch" />
         </div>
@@ -614,7 +614,7 @@
             <button class="btn ghost sm" id="btnOpenAvdDir">Open</button>
           </div>
           <span class="sub">真正吃盘的是这一块：数据分区（默认 6 GB，可在上面对大）+ 快速启动快照（约 2–3 GB）。
-            磁盘紧张时把它指到另一个盘（如 D:），重启软件后生效；旧目录里的 <code>apkstart.avd</code> 可整体搬过去再删。</span>
+            If disk space is low, move this folder to another drive (e.g. D:) and restart the app. You can move the <code>apkstart.avd</code> folder there, then delete the old copy.</span>
         </div>
         <div class="field">
           <label>Uninstall ApkStart</label>

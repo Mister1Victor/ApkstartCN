@@ -404,10 +404,10 @@
           <div class="field">
             <label>Gitee read-only token (usually not needed)</label>
             <input id="setGiteeToken" type="password" placeholder="Leave blank: public repositories can be read anonymously" />
-            <span class="sub">本项目仓库已公开，Gitee 的发行版列表匿名就能读，留空也能用 Gitee 源。
-              只有在「Gitee 被限流（返回 403/429）」或你想读私有分支时才需要填：
-              gitee.com → 设置 → 私人令牌，只勾「projects」即可，它只用于读取发行版列表，
-              不会上传任何东西。</span>
+            <span class="sub">This project is public, so Gitee releases can be read anonymously. Leave this blank to use the Gitee source.
+              Only needed if Gitee rate-limits you (403/429) or you want to access a private branch:
+              gitee.com → Settings → Personal access tokens; select only “projects”. This is used only to read the release list,
+              and does not upload anything.</span>
           </div>
         </details>
       </div>
@@ -613,7 +613,7 @@
             <button class="btn ghost sm" id="btnBrowseAvdDir">Browse</button>
             <button class="btn ghost sm" id="btnOpenAvdDir">Open</button>
           </div>
-          <span class="sub">真正吃盘的是这一块：数据分区（默认 6 GB，可在上面对大）+ 快速启动快照（约 2–3 GB）。
+          <span class="sub">Most disk usage comes from the data partition (6 GB by default; increase it above) and quick-boot snapshots (about 2–3 GB).
             If disk space is low, move this folder to another drive (e.g. D:) and restart the app. You can move the <code>apkstart.avd</code> folder there, then delete the old copy.</span>
         </div>
         <div class="field">
@@ -636,8 +636,8 @@
           </div>
           <div class="update-bar" id="updateBar" hidden><i id="updateBarFill"></i></div>
           <span class="sub" id="updateNote">
-            从 GitHub（RoutineMiku/apkstart）获取最新版本；轻量版会下载便携包并自动替换程序文件，
-            运行时、已装应用与快照都不受影响。
+            Get the latest release from GitHub (RoutineMiku/apkstart). The portable version downloads the archive and replaces the app files automatically,
+            without affecting the runtime, installed apps, or snapshots.
           </span>
         </div>
       </div>

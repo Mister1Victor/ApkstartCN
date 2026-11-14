@@ -805,7 +805,7 @@ function renderUpdate(info) {
   if (info.current) cur.textContent = `v${info.current}`;
 
   if (info.ok === false) {
-    st.textContent = `检查Failed: ${info.error || 'Network unavailable'}`;
+    st.textContent = `Check failed: ${info.error || 'Network unavailable'}`;
     // 检查失败也要给一条出路：直接把发布页打开，用户至少能手动下载。
     // 以前这里是「什么都不显示」，用户只会觉得「更新功能坏了」。
     showUpdateBtn(true);
@@ -823,7 +823,7 @@ function renderUpdate(info) {
     const stale = info.stale ? '(offline cache; may not be current)' : '';
     st.textContent = `New version available ${info.tag}${src ? ` (${src})` : ''}${bad ? `; ${bad} unreachable` : ''}${stale}`;
     showUpdateBtn(true);
-    btn.textContent = info.asset ? '立即更新' : 'Open download page';
+    btn.textContent = info.asset ? 'Update now' : 'Open download page';
     btn.dataset.mode = info.asset ? 'auto' : 'manual';
     const note = $('updateNote');
     if (note && info.notes) {
@@ -854,9 +854,9 @@ function renderUpdateProgress(p) {
   const bar = $('updateBar');
   const fill = $('updateBarFill');
   if (p.stage === 'error') {
-    if (st) st.textContent = `更新Failed: ${p.message || ''}`;
+    if (st) st.textContent = `Update failed: ${p.message || ''}`;
     if (bar) bar.hidden = true;
-    toast({ title: '更新失败', body: p.message || '', type: 'error' });
+    toast({ title: 'Update failed', body: p.message || '', type: 'error' });
     return;
   }
   if (st) st.textContent = p.message || 'Updating…';
@@ -881,9 +881,9 @@ function bindUpdate() {
         const info = await api.updateCheck();
         renderUpdate(info);
         if (info && info.hasUpdate) toast({ title: `New version available ${info.tag}`, body: 'Click “Update now” to download and install automatically', type: 'info' });
-        else if (info && info.ok !== false) toast({ title: '已是最新版本', body: `v${info.current}`, type: 'ok' });
+        else if (info && info.ok !== false) toast({ title: 'Already up to date', body: `v${info.current}`, type: 'ok' });
       } catch (e) {
-        $('updateState').textContent = `检查Failed: ${e.message}`;
+        $('updateState').textContent = `Check failed: ${e.message}`;
       } finally {
         check.disabled = false;
         check.textContent = old;
@@ -906,10 +906,10 @@ function bindUpdate() {
     const r = await api.updateApply().catch((e) => ({ ok: false, error: e.message }));
     if (!r || !r.ok) {
       go.disabled = false;
-      go.textContent = '立即更新';
+      go.textContent = 'Update now';
       if (r && r.error && !r.manual) {
-        $('updateState').textContent = `更新Failed: ${r.error}`;
-        toast({ title: '更新失败', body: r.error, type: 'error' });
+        $('updateState').textContent = `Update failed: ${r.error}`;
+        toast({ title: 'Update failed', body: r.error, type: 'error' });
       }
     } else {
       $('updateState').textContent = `Downloaded v${r.version}, restarting to finish installation…`;
@@ -972,7 +972,7 @@ function bindSettings() {
       if (!gb) { toast({ title: 'Choose a size first', body: '“Auto” lets the app choose based on available disk space; no expansion needed', type: 'info' }); return; }
       const { response } = await api.confirm({
         title: 'Expand the Android data partition now?',
-        message: `The /data partition will be resized to ${gb} GB (就地扩容，Installed apps和存档都会保留)。`,
+        message: `The /data partition will be resized to ${gb} GB (installed apps and saved data will be preserved).`,
         detail: 'Running Android apps must close first. The next launch will boot again and may take a few extra seconds.',
         okLabel: 'Start expansion',
       });
@@ -1087,7 +1087,7 @@ function bindSettings() {
       if (r.cancelled) return;
       toast({
         title: 'Cleanup complete',
-        body: `Freed about ${(r.saved / 1048576).toFixed(0)} MB (${r.removed.length} more)，Installed应用保留。`,
+        body: `Freed about ${(r.saved / 1048576).toFixed(0)} MB (${r.removed.length} items removed; installed apps are preserved.`,
         type: 'ok',
       });
       const u = await api.runtimeUsage();
@@ -1222,10 +1222,10 @@ function bindSettings() {
         toast({ title: 'Cleanup failed', body: (c && c.error) || 'Please try again', type: 'error' });
         return;
       }
-      const failNote = (c.failed && c.failed.length) ? `，${c.failed.length} more被占用未删` : '';
+      const failNote = (c.failed && c.failed.length) ? `, ${c.failed.length} items could not be deleted because they are in use` : '';
       toast({
         title: 'Removed old-version leftovers',
-        body: `Removed ${c.removed.length} more，释放 ${c.freedMB || 0} MB${failNote}。`,
+        body: `Removed ${c.removed.length} items and freed ${c.freedMB || 0} MB${failNote}.`,
         type: 'ok',
       });
       const u = await api.runtimeUsage();
@@ -1339,7 +1339,7 @@ function bindSettings() {
     $('compatInstallField').hidden = !on || !!ok;
     if (env.playImage) {
       $('compatImgStatus').textContent = ok
-        ? `已Ready (${(env.playImage.size / 1073741824).toFixed(2)} GB)` : 'Not downloaded';
+        ? `Ready (${(env.playImage.size / 1073741824).toFixed(2)} GB)` : 'Not downloaded';
     }
   })();
   $('btnOpenData').addEventListener('click', async () => {
@@ -1364,8 +1364,8 @@ function bindSettings() {
       await api.setSettings({ runtime: { avdDir: picked } });
       $('setAvdDir').value = picked;
       toast({
-        title: '安卓数据目录已更新',
-        body: '请重启 ApkStart 使其生效。旧目录里的 apkstart.avd 可以整体搬到新目录，再删掉旧的。',
+        title: 'Android data folder updated',
+        body: 'Restart ApkStart for this change to take effect. You can move the apkstart.avd folder from the old location to the new one, then delete the old folder.',
         type: 'ok',
         sticky: true,
       });
@@ -1413,12 +1413,12 @@ function bindSettings() {
       await api.assocUnregister();
       btn.textContent = 'Not associated · click to enable';
       btn.dataset.on = '0';
-      toast({ title: '.apk 关联已取消' });
+      toast({ title: '.apk association removed' });
     } else {
       const r = await api.assocRegister();
       btn.textContent = 'Associated · click to remove';
       btn.dataset.on = '1';
-      toast({ title: '.apk 关联已开启', body: r.ok ? '现在双击 APK 会直接安装到 ApkStart' : '', type: r.ok ? 'ok' : 'error' });
+      toast({ title: '.apk association enabled', body: r.ok ? 'Double-clicking an APK will now install it directly in ApkStart' : '', type: r.ok ? 'ok' : 'error' });
     }
   });
 }
@@ -1595,7 +1595,7 @@ function bindEvents() {
     if (installToast) { try { installToast.dismiss(); } catch (_) { /* ignore */ } installToast = null; }
     const name = p && p.file ? String(p.file).split(/[\\/]/).pop() : '';
     toast({
-      title: name ? `安装Failed: ${name}` : '安装失败',
+      title: name ? `Installation failed: ${name}` : 'Installation failed',
       body: friendlyInstallErrorText((p && p.message) || 'Unknown error'),
       type: 'error',
     });
@@ -1719,7 +1719,7 @@ function renderWelcomeTips() {
     .join('');
 }
 
-/* ---------------- 环境自检 ---------------- */
+/* ---------------- Environment check ---------------- */
 
 let envBusy = false;
 
@@ -1756,9 +1756,9 @@ function renderEnvCheck(r) {
     box.innerHTML = `
       <div class="env-check-ok">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
-        <span>环境自检通过，没有发现会影响运行的问题。</span>
+        <span>Environment check passed. No issues affecting operation were found.</span>
         <span style="flex:1"></span>
-        <button class="btn ghost sm" id="btnEnvRecheck">重新检查</button>
+        <button class="btn ghost sm" id="btnEnvRecheck">Check again</button>
       </div>`;
     const re = $('btnEnvRecheck');
     if (re) re.addEventListener('click', selfCheck);
@@ -1769,12 +1769,12 @@ function renderEnvCheck(r) {
   box.hidden = false;
   box.innerHTML = `
     <div class="env-check-head">
-      <span class="ec-title">环境自检</span>
+      <span class="ec-title">Environment check</span>
       ${errs ? `<span class="ec-count">${errs} critical</span>` : ''}
       ${warns ? `<span class="ec-count warn">${warns} notices</span>` : ''}
       <span class="ec-spacer"></span>
-      <button class="btn ghost sm" id="btnEnvRecheck">重新检查</button>
-      <button class="btn primary sm" id="btnEnvFixAll">一键Fix全部</button>
+      <button class="btn ghost sm" id="btnEnvRecheck">Check again</button>
+      <button class="btn primary sm" id="btnEnvFixAll">Fix all</button>
     </div>
     <div class="env-check-list">
       ${issues.map((i) => `
@@ -1804,12 +1804,12 @@ async function fixIssue(issue) {
     case 'vcRedist': {
       const r = await api.installVcRedist().catch(() => ({ ok: false }));
       if (!r.ok && r.reason === 'no-installer') {
-        api.openExternal('https://learn.microsoft.com/zh-CN/cpp/windows/latest-supported-vc-redist?view=msvc-170#visual-studio-2015-2017-2019-and-2022');
+        api.openExternal('https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#visual-studio-2015-2017-2019-and-2022');
         toast({ title: 'Built-in installer not found', body: 'Microsoft’s download page has been opened. Download the x64 version.', type: 'info' });
         break;
       }
       toast(r.ok
-        ? { title: 'VC++ 运行库Installed', type: 'ok' }
+        ? { title: 'VC++ Runtime installed', type: 'ok' }
         : { title: 'Installation incomplete', body: r.error || 'Please try again', type: 'error' });
       break;
     }
@@ -1848,7 +1848,7 @@ async function fixIssue(issue) {
       break;
     }
     default:
-      toast({ title: '暂不支持自动Fix', body: issue.hint || '', type: 'info' });
+      toast({ title: 'Automatic fix is not supported yet', body: issue.hint || '', type: 'info' });
   }
   // Fix后重新自检，刷新横幅与状态
   setTimeout(selfCheck, 600);

@@ -347,7 +347,7 @@ async function autoDeploy() {
         if (afterPack.emulator.ok && afterPack.sysimg.ok) return { ok: true, source: 'github' };
         progress({ message: 'Runtime package is incomplete; downloading missing components from official sources…' });
       } catch (e) {
-        progress({ message: `GitHub 运行时不可用（${e.message}），改用官方源…` });
+        progress({ message: `GitHub runtime unavailable (${e.message}); switching to official sources…` });
       }
     }
     if (!env.adb.ok) {
@@ -507,7 +507,7 @@ function buildTray() {
       { label: 'Sync shared folder', click: () => sharer.sync() },
       { label: 'Settings', click: () => { showWindow(); send('ui:navigate', 'settings'); } },
       {
-        label: updateInfo && updateInfo.hasUpdate ? `发现新版本 ${updateInfo.tag}` : '检查更新',
+        label: updateInfo && updateInfo.hasUpdate ? `New version available: ${updateInfo.tag}` : 'Check for updates',
         click: async () => {
           showWindow();
           send('ui:navigate', 'settings');
@@ -517,7 +517,7 @@ function buildTray() {
             const r = await dialog.showMessageBox(mainWindow || undefined, {
               type: 'question',
               title: 'Update available',
-              message: `ApkStart ${info.tag} 已发布，当前版本 v${app.getVersion()}。现在更新吗？`,
+              message: `ApkStart ${info.tag} is available. Current version: v${app.getVersion()}. Update now?`,
               detail: (info.notes || '').slice(0, 600),
               buttons: ['Update now', 'Later'],
               defaultId: 0,
@@ -574,7 +574,7 @@ async function runInstall(filePath) {
     send('install:done', result);
     // 新建的桌面图标要让资源管理器立刻刷新，否则用户会以为「没创建快捷方式」
     windowctl.refreshShell().catch(() => {});
-    notify('Installation complete', `${result.app.label} 已安装${result.app.shortcutPath ? '; desktop shortcut created' : ''}`);
+    notify('Installation complete', `${result.app.label} installed${result.app.shortcutPath ? '; desktop shortcut created' : ''}`);
     return result;
   } catch (e) {
     send('install:error', { message: e.message, file: filePath });
@@ -694,7 +694,7 @@ async function runLaunch(pkg) {
     // 下次点应用还是走同一条隐藏 → embed 的路径。
     if (winAgent) armAgent(winAgent).catch(() => {});
     showWindow();
-    send('toast', { type: 'error', message: `启动失败：${e.message}` });
+    send('toast', { type: 'error', message: `Launch failed: ${e.message}` });
     return { ok: false, error: e.message };
   }
 }
@@ -996,7 +996,7 @@ function registerIpc() {
       if (free && free < 8192) {
         issues.push({
           code: 'disk', severity: free < 2048 ? 'error' : 'warn', title: 'Low disk space for runtime',
-          hint: `「${runtime.provisioner.paths().root}」所在盘仅剩 ${free} MB，运行时与镜像可能撑爆硬盘。`, fix: 'disk',
+          hint: `Only ${free} MB remain on the drive containing “${runtime.provisioner.paths().root}”. The runtime and system image may fill the disk.`, fix: 'disk',
         });
       }
       const rtDir = runtime.provisioner.paths().root;
@@ -1102,7 +1102,7 @@ function registerIpc() {
     try {
       const r = runtime.emulator.resizeDataPartition(mb);
       appLog(`data partition -> ${want}GB: ${JSON.stringify(r)}`);
-      if (r && r.ok) notify('Data partition resized', `安卓可用空间约 ${want} GB${stopped ? '（运行时已重启）' : ''}`);
+      if (r && r.ok) notify('Data partition resized', `About ${want} GB available on Android${stopped ? ' (runtime restarted)' : ''}`);
       return { ok: !!(r && r.ok), stopped, ...r, ...runtime.emulator.dataInfo() };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -1116,11 +1116,11 @@ function registerIpc() {
     const preview = await runtime.cleanup(pass);
     const { response } = await dialog.showMessageBox(mainWindow, {
       type: 'warning',
-      buttons: ['Cancel', `清理 ${preview.candidates.length} 项`],
+      buttons: ['Cancel', `Clean up ${preview.candidates.length} items`],
       defaultId: 0,
       cancelId: 0,
       title: 'Confirm runtime cache cleanup',
-      message: `将释放约 ${(preview.candidates.reduce((n, c) => n + c.size, 0) / 1048576).toFixed(0)} MB`,
+      message: `About ${(preview.candidates.reduce((n, c) => n + c.size, 0) / 1048576).toFixed(0)} MB will be freed`,
       detail: (opts.includeSnapshots
         ? 'The runtime will stop first, then old images, the current AVD quick-boot snapshot, lock files, and inactive AVD caches will be removed. Installed apps are kept (only snapshots are cleared).'
         : 'Only old images, snapshots, lock files, and inactive AVD caches will be removed. Installed apps are kept.')
@@ -1257,7 +1257,7 @@ function registerIpc() {
           windowsHide: true,
         });
         proc.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(
-          code === 2 ? 'Administrator permission was denied (click “Yes” to install the driver)' : `驱动安装失败（退出码 ${code}）`,
+          code === 2 ? 'Administrator permission was denied (click “Yes” to install the driver)' : `Driver installation failed (exit code ${code})`,
         ))));
         proc.on('error', (e) => reject(e));
       });
@@ -1308,7 +1308,7 @@ function registerIpc() {
         const ps = `try { $p = Start-Process -FilePath '${esc}' -WorkingDirectory '${path.dirname(bat).replace(/'/g, "''")}' -Verb RunAs -Wait -PassThru; exit $p.ExitCode } catch { exit 2 }`;
         const proc = sp('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true });
         proc.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(
-          code === 2 ? 'Administrator permission was denied (click “Yes” to install the driver)' : `驱动安装失败（退出码 ${code}）`,
+          code === 2 ? 'Administrator permission was denied (click “Yes” to install the driver)' : `Driver installation failed (exit code ${code})`,
         ))));
         proc.on('error', (e) => reject(e));
       });
@@ -1539,7 +1539,7 @@ function registerIpc() {
         case 'animations': return { ok: true, ...(await androidSet.setAnimations(!!value)) };
         case 'fontScale': return { ok: true, ...(await androidSet.setFontScale(value)) };
         case 'density': return { ok: true, ...(await androidSet.setDensity(value)) };
-        default: return { ok: false, error: `未知设置项 ${key}` };
+        default: return { ok: false, error: `Unknown setting: ${key}` };
       }
     } catch (e) { return { ok: false, error: e.message }; }
   });
@@ -1726,8 +1726,8 @@ if (!gotLock) {
       if (freeMB && freeMB < 3072) {
         appLog(`LOW_DISK free=${freeMB}MB dir=${store.DATA_DIR}`);
         setTimeout(() => {
-          notify('Low disk space', `只剩 ${(freeMB / 1024).toFixed(1)} GB。请到「设置 → 系统集成」把安卓数据目录/运行时目录改到其他盘，或先清理磁盘。`);
-          send('toast', { type: 'error', message: `磁盘只剩 ${(freeMB / 1024).toFixed(1)} GB，安卓可能无法启动（设置 → 系统集成 可换盘）` });
+          notify('Low disk space', `Only ${(freeMB / 1024).toFixed(1)} GB remain. Go to Settings → System Integration to move the Android data/runtime folder to another drive, or free up disk space.`);
+          send('toast', { type: 'error', message: `Only ${(freeMB / 1024).toFixed(1)} GB remain. Android may not start (change drives in Settings → System Integration).` });
         }, 3000).unref?.();
       }
     }

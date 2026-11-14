@@ -834,7 +834,7 @@ function renderUpdate(info) {
   } else {
     const src = (info.sources || []).map((x) => x.name).join(' / ');
     const stale = info.stale ? '(offline cache)' : '';
-    st.textContent = `已是最新版本 (v${info.current})${src ? ` · 经由 ${src}` : ''}${stale}`;
+    st.textContent = `Up to date (v${info.current})${src ? ` · via ${src}` : ''}${stale}`;
     showUpdateBtn(false);
     if (bar) bar.hidden = true;
   }
@@ -1134,7 +1134,7 @@ function bindSettings() {
       }
       toast({
         title: 'Android data reset',
-        body: `Freed about ${r.reclaimedMB} MB，Installed应用记录已清空。`,
+        body: `Freed about ${r.reclaimedMB} MB; installed app records were cleared.`,
         type: 'ok',
       });
       const u = await api.runtimeUsage();
@@ -1209,7 +1209,7 @@ function bindSettings() {
       const ok = await api.confirm({
         type: 'warning',
         title: 'Remove leftovers from older versions?',
-        message: `Found ${items.length} more残留，约 ${mb} MB:`,
+        message: `Found ${items.length} leftover items, about ${mb} MB:`,
         detail: `${lines.join('\n')}\n\nOnly old application folders, obsolete uninstall entries, and temporary update files will be removed.`
           + 'The currently running version and your app data will not be affected.',
         buttons: ['Cancel', 'Start cleanup'],
@@ -1287,7 +1287,7 @@ function bindSettings() {
       btn.disabled = false;
       toast({
         title: 'Portable version cannot be uninstalled automatically',
-        body: `请手动删除程序目录 (${r.exeDir})与数据目录 (${r.dataDir})`,
+        body: `Please manually delete the application folder (${r.exeDir}) and data folder (${r.dataDir})`,
         type: 'info', sticky: true,
       });
       return;
@@ -1397,7 +1397,7 @@ function bindSettings() {
     const el = $('probeResult');
     el.textContent = 'Starting…';
     const r = await api.runtimeStart();
-    el.textContent = r.ok ? `Ready: ${r.engine}` : `启动Failed: ${r.error}`;
+    el.textContent = r.ok ? `Ready: ${r.engine}` : `Startup failed: ${r.error}`;
     refreshStatus();
   });
 
@@ -1679,7 +1679,7 @@ async function maybeShowWelcome() {
   $('welcomeHi').textContent = `${greetingOf(h)}，Welcome back`;
   const ver = (startupInfo && startupInfo.version) || (state.status && state.status.version) || '';
   const ready = state.status && state.status.ready;
-  $('welcomeSub').textContent = `ApkStart${ver ? ` v${ver}` : ''} · ${ready ? '运行时Ready，点开即用' : '运行时会按需自动准备'}`;
+  $('welcomeSub').textContent = `ApkStart${ver ? ` v${ver}` : ''} · ${ready ? 'Runtime ready — open apps instantly' : 'Runtime will be prepared automatically when needed'}`;
 
   const apps = (state.apps || []).length;
   const dev = $('statusDevice') ? $('statusDevice').textContent.trim() : '';
@@ -1746,7 +1746,7 @@ function renderEnvCheck(r) {
   if (chip) {
     const errs = issues.filter((i) => i.severity === 'error').length;
     chip.hidden = issues.length === 0;
-    chip.textContent = errs ? `${errs} more待Fix` : `${issues.length} more提示`;
+    chip.textContent = errs ? `${errs} issues to fix` : `${issues.length} notices`;
     chip.className = `status-chip${errs ? ' err' : ''}`;
     chip.title = issues.map((i) => i.title).join('; ');
   }

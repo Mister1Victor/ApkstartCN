@@ -109,7 +109,7 @@
       </label>
     </div>
     <div class="welcome-actions">
-      <button class="btn ghost" id="welcomeSettings">OpenSettings</button>
+      <button class="btn ghost" id="welcomeSettings">Open Settings</button>
       <button class="btn primary" id="welcomeOk">Get started</button>
     </div>
   </div>
@@ -130,7 +130,7 @@
 <!-- 右键菜单 -->
 <div class="ctxmenu" id="ctxmenu"></div>
 
-<!-- Settings -->
+<!-- 设置 -->
 <div class="modal-mask" id="settingsMask">
   <div class="modal">
     <header class="modal-head">
@@ -161,16 +161,16 @@
           <h2>Install Android to a virtual disk</h2>
           <p class="guide-sub">The virtual machine window is open. Complete these six steps once. ApkStart will then boot directly from the disk without needing the image again.</p>
           <ol class="guide-list">
-            <li><b>Boot menu</b>：用 <kbd>↓</kbd> select <code>Installation - Install Android-x86 to harddisk</code>，and press Enter</li>
-            <li><b>Choose Partition</b>：选 <code>Create/Modify partitions</code>；When asked whether to use GPT, select <code>No</code></li>
-            <li><b>cfdisk Partition</b>：<code>New</code> → <code>Primary</code> → 容量直接and press Enter → <code>Bootable</code> → <code>Write</code> → 输入 <code>yes</code> → <code>Quit</code></li>
-            <li><b>Format</b>：选 <code>vda1</code> → 提示Format时选 <code>ext4</code> → <code>Yes</code></li>
+            <li><b>Boot menu</b>：用 <kbd>↓</kbd> select <code>Installation - Install Android-x86 to harddisk</code>，回车</li>
+            <li><b>Choose Partition</b>：选 <code>Create/Modify partitions</code>；询问是否使用 GPT 时选 <code>No</code></li>
+            <li><b>cfdisk 分区</b>：<code>New</code> → <code>Primary</code> → 容量直接回车 → <code>Bootable</code> → <code>Write</code> → 输入 <code>yes</code> → <code>Quit</code></li>
+            <li><b>Format</b>：选 <code>vda1</code> → 提示格式化时选 <code>ext4</code> → <code>Yes</code></li>
             <li><b>Bootloader & system</b>：<code>Install GRUB</code> 选 <code>Yes</code>；<code>Install /system as read-write</code> 选 <code>Yes</code></li>
-            <li><b>完成</b>：When progress reaches 100%, click “Installation complete” below (ApkStart will restart and take over automatically).</li>
+            <li><b>完成</b>：进度到 100% 后点下面的「我已安装完成」（ApkStart 会自动重启并接管）</li>
           </ol>
-          <p class="guide-tip">If adb is not connected afterward: in the VM window, press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F1</kbd> to open the terminal and run
+          <p class="guide-tip">如果之后提示 adb 未连接：在虚拟机窗口按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F1</kbd> 进入终端，执行
             <code>setprop service.adb.tcp.port 5555</code>、<code>stop adbd</code>、<code>start adbd</code>，
-            再按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F7</kbd> to return to the graphical interface.</p>
+            再按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F7</kbd> 回到图形界面。</p>
           <div class="guide-foot">
             <button class="btn primary" id="btnMarkInstalled">Installation complete</button>
             <button class="btn ghost" id="btnGuideClose">Maybe later</button>
@@ -179,16 +179,16 @@
       </div>
 
       <div class="group">
-        <div class="group-title">自动模式（默认，无需Settings）</div>
+        <div class="group-title">Automatic mode (default; no setup required)</div>
         <div class="field">
           <label>Auto-detected system settings</label>
           <div class="inline-note" id="autoProfileText">Detecting…</div>
-          <span class="sub">Memory, CPU cores, rendering backend, ports, and acceleration are selected automatically. If startup fails, ApkStart retries with fallback settings. No manual changes needed.</span>
+          <span class="sub">内存、核心数、渲染后端、端口、加速方式全部自动选择；启动失败会自动降级重试，不需要手动改。</span>
         </div>
         <div class="field">
           <label>Total disk usage (runtime + Android data + cache)</label>
           <div class="row">
-            <span class="inline-note" id="usageText">Calculating…</span>
+            <span class="inline-note" id="usageText">正在统计…</span>
             <button class="btn ghost sm" id="btnCleanup">Clean up reclaimable files</button>
             <button class="btn ghost sm" id="btnLeftovers" title="扫描并清掉旧版本留下的程序目录、失效的卸载项和更新临时文件">Remove leftovers from older versions</button>
             <button class="btn ghost sm" id="btnRepairNetwork" title="安卓虚拟机没有网络时（应用里联网页面一直黑屏/转圈），用这个把安卓数据重置掉来修网络。应用清单会保留，点开应用会自动重装">Repair network</button>
@@ -196,9 +196,9 @@
           </div>
           <label class="checkbox-inline">
             <input type="checkbox" id="chkCleanSnapshots" />
-            <span>连当前 AVD 的快速启动快照也一起清（会先停Runtime，能真正回收几 GB 快照）</span>
+            <span>连当前 AVD 的快速启动快照也一起清（会先停运行时，能真正回收几 GB 快照）</span>
           </label>
-          <span class="sub">系统镜像全机共享一份，应用数据用差分层保存；旧镜像、旧快照、日志和锁文件都可回收。日志超过上限会自动滚动，不会无限增长。「Reset Android data」会真实删除数 GB 用户数据，仅保留系统本身。</span>
+          <span class="sub">系统镜像全机共享一份，应用数据用差分层保存；旧镜像、旧快照、日志和锁文件都可回收。日志超过上限会自动滚动，不会无限增长。「重置安卓数据」会真实删除数 GB 用户数据，仅保留系统本身。</span>
         </div>
         <div class="runtime-actions">
           <button class="btn ghost sm" id="btnDiagnostics">Export diagnostic report</button>
@@ -227,10 +227,10 @@
         <div class="field" id="portraitField">
           <label>Portrait resolution</label>
           <select id="setPortrait">
-            <option value="720x1280">Small · 720 × 1280</option>
-            <option value="900x1600">Medium · 900 × 1600</option>
-            <option value="1080x1920">Large · 1080 × 1920</option>
-            <option value="1440x2560">超Large · 1440 × 2560</option>
+            <option value="720x1280">小 · 720 × 1280</option>
+            <option value="900x1600">中 · 900 × 1600</option>
+            <option value="1080x1920">大 · 1080 × 1920</option>
+            <option value="1440x2560">超大 · 1440 × 2560</option>
           </select>
           <span class="sub">窗口模式下可拖动边框任意缩放；这里调的是 Android 内部渲染尺寸，越小越省性能。</span>
         </div>
@@ -240,7 +240,7 @@
         <div class="group-title">Mouse controls</div>
         <div class="field">
           <label>Left button · Confirm / tap</label>
-          <span class="sub">模拟器原生把左键当成手指点击，按住拖动就是滑动，无需额外Settings。</span>
+          <span class="sub">模拟器原生把左键当成手指点击，按住拖动就是滑动，无需额外设置。</span>
         </div>
         <div class="field switch-field">
           <div>
@@ -261,12 +261,12 @@
         <div class="field switch-field">
           <div>
             <label>鼠标侧键 · 返回 / 前进（默认关闭）</label>
-            <span class="sub">侧键映射需要全局鼠标钩子。钩子只在 ApkStart App window处于前台时安装，失焦或关闭立即卸载，不会拖慢桌面。</span>
+            <span class="sub">侧键映射需要全局鼠标钩子。钩子只在 ApkStart 应用窗口处于前台时安装，失焦或关闭立即卸载，不会拖慢桌面。</span>
           </div>
           <input type="checkbox" id="setMouseSideButtons" class="switch" />
         </div>
         <div class="field">
-          <span class="sub">以上映射只在App window前台生效；切回桌面或关闭窗口后，鼠标行为完全恢复 Windows 原生。</span>
+          <span class="sub">以上映射只在应用窗口前台生效；切回桌面或关闭窗口后，鼠标行为完全恢复 Windows 原生。</span>
         </div>
       </div>
 
@@ -275,24 +275,24 @@
         <div class="field">
           <label>Resource profile</label>
           <select id="setResourceMode">
-            <option value="save">Power saving · 2 cores / lower priority / 540p (older PCs, background use)</option>
-            <option value="balanced">Balanced · half of physical cores / lower priority / 720p (recommended)</option>
-            <option value="smooth">Performance · all cores / same priority as foreground (video, games)</option>
+            <option value="save">省资源 · 2 核 / 让出前台 / 540p（老机器、挂机）</option>
+            <option value="balanced">均衡 · 一半物理核 / 让出前台 / 720p（推荐）</option>
+            <option value="smooth">流畅 · 不限核数 / 与前台同优先级（视频、游戏）</option>
           </select>
-          <span class="sub">决定安卓虚拟机吃多少 CPU、画面多细腻。红果/抖音发卡就切「流畅」，只想挂着跑小应用就切「省资源」。改完下一次Open应用生效。</span>
+          <span class="sub">决定安卓虚拟机吃多少 CPU、画面多细腻。红果/抖音发卡就切「流畅」，只想挂着跑小应用就切「省资源」。改完下一次打开应用生效。</span>
         </div>
         <div class="field two">
           <div>
             <label>Graphics quality (Android rendering resolution)</label>
             <select id="setRenderSize">
-              <option value="auto">Auto (based on acceleration)</option>
+              <option value="auto">自动（按加速状态）</option>
               <option value="540x960">流畅 · 540 × 960</option>
               <option value="720x1280">均衡 · 720 × 1280</option>
               <option value="1080x1920">高清 · 1080 × 1920</option>
             </select>
           </div>
           <div>
-            <label>安卓数据Partition（应用与游戏装这里）</label>
+            <label>Android data partition (apps and games are stored here)</label>
             <select id="setDataGB">
               <option value="0">自动</option>
               <option value="4">4 GB</option>
@@ -307,11 +307,11 @@
         <div class="field">
           <div class="row">
             <button class="btn ghost sm" id="btnGrowData">Expand now</button>
-            <span class="sub" style="flex:1;margin:0">扩容是就地做的：已装应用与存档都保留，只是下次Open应用会多花十几秒。</span>
+            <span class="sub" style="flex:1;margin:0">扩容是就地做的：已装应用与存档都保留，只是下次打开应用会多花十几秒。</span>
           </div>
         </div>
         <div class="field">
-          <span class="sub" id="dataNote">正在读取数据Partition…</span>
+          <span class="sub" id="dataNote">正在读取数据分区…</span>
         </div>
         <div class="field switch-field">
           <div>
@@ -330,7 +330,7 @@
         <div class="field switch-field">
           <div>
             <label>Keep quick-boot snapshot (recommended)</label>
-            <span class="sub">第二次Open应用只要几秒，代价是磁盘上多一份约 2–3 GB 的 <code>ram.bin</code>。磁盘紧张可以关掉：只影响启动速度，不影响应用与存档。</span>
+            <span class="sub">第二次打开应用只要几秒，代价是磁盘上多一份约 2–3 GB 的 <code>ram.bin</code>。磁盘紧张可以关掉：只影响启动速度，不影响应用与存档。</span>
           </div>
           <input type="checkbox" id="setKeepSnapshot" class="switch" />
         </div>
@@ -339,35 +339,35 @@
           <div class="field switch-field">
             <div>
               <label>Lightweight container</label>
-              <span class="sub">收敛 vCPU 配额并降低进程优先级，CPU 优先让给 Windows 桌面。上面的「Resource profile」已经会自动Settings这一项。</span>
+              <span class="sub">收敛 vCPU 配额并降低进程优先级，CPU 优先让给 Windows 桌面。上面的「资源策略」已经会自动设置这一项。</span>
             </div>
             <input type="checkbox" id="setLiteMode" class="switch" />
           </div>
           <div class="field">
             <label>Virtual machine priority</label>
             <select id="setPriorityMode">
-              <option value="balanced">均衡（推荐）· Runtime让着前台窗口</option>
-              <option value="performance">性能优先 · Runtime与前台同等优先级</option>
+              <option value="balanced">均衡（推荐）· 运行时让着前台窗口</option>
+              <option value="performance">性能优先 · 运行时与前台同等优先级</option>
             </select>
-            <span class="sub">没有App window时，容器一律自动降到最低优先级停放。</span>
+            <span class="sub">没有应用窗口时，容器一律自动降到最低优先级停放。</span>
           </div>
         </details>
         <div class="field switch-field">
           <div>
             <label>Deep-trim Android background services</label>
-            <span class="sub">额外禁用 Play 商店、Settings向导、打印服务等后台包，只留Open应用必需的环境。若遇到应用提示缺少 Google Play 服务，关掉此开关会自动恢复。</span>
+            <span class="sub">额外禁用 Play 商店、设置向导、打印服务等后台包，只留打开应用必需的环境。若遇到应用提示缺少 Google Play 服务，关掉此开关会自动恢复。</span>
           </div>
           <input type="checkbox" id="setDeepTrim" class="switch" />
         </div>
         <div class="field switch-field">
           <div>
             <label>Prewarm at startup (recommended)</label>
-            <span class="sub">启动 ApkStart 后就在后台把安卓环境引导好（窗口全程隐藏，不会看到模拟器）。之后点任何应用只剩一次「Open」，实测从 20 多秒降到几乎不用等。代价是空闲时常驻约 1GB 内存，关掉后第一次Open应用需要冷启动。</span>
+            <span class="sub">启动 ApkStart 后就在后台把安卓环境引导好（窗口全程隐藏，不会看到模拟器）。之后点任何应用只剩一次「打开」，实测从 20 多秒降到几乎不用等。代价是空闲时常驻约 1GB 内存，关掉后第一次打开应用需要冷启动。</span>
           </div>
           <input type="checkbox" id="setPrewarm" class="switch" />
         </div>
         <div class="field">
-          <span class="sub">安卓环境只开机一次并常驻；之后Open应用不再重跑整个系统，只启动该应用并停掉其他应用进程。关掉最后一个窗口会清后台、停放容器，下次点开仍是秒进。</span>
+          <span class="sub">安卓环境只开机一次并常驻；之后打开应用不再重跑整个系统，只启动该应用并停掉其他应用进程。关掉最后一个窗口会清后台、停放容器，下次点开仍是秒进。</span>
         </div>
       </div>
 
@@ -406,7 +406,7 @@
             <input id="setGiteeToken" type="password" placeholder="留空即可：公开仓库匿名也能读" />
             <span class="sub">本项目仓库已公开，Gitee 的发行版列表匿名就能读，留空也能用 Gitee 源。
               只有在「Gitee 被限流（返回 403/429）」或你想读私有分支时才需要填：
-              gitee.com → Settings → 私人令牌，只勾「projects」即可，它只用于读取发行版列表，
+              gitee.com → 设置 → 私人令牌，只勾「projects」即可，它只用于读取发行版列表，
               不会上传任何东西。</span>
           </div>
         </details>
@@ -419,8 +419,8 @@
         <div class="field">
           <label>Engine mode</label>
           <select id="setEngineMode">
-            <option value="builtin">自带Runtime（推荐，QEMU + Android-x86，无第三方依赖）</option>
-            <option value="attach">连接已有Runtime（高级：复用 WSA / 其他模拟器的 adb 端口）</option>
+            <option value="builtin">自带运行时（推荐，QEMU + Android-x86，无第三方依赖）</option>
+            <option value="attach">连接已有运行时（高级：复用 WSA / 其他模拟器的 adb 端口）</option>
           </select>
         </div>
         <div class="field">
@@ -454,7 +454,7 @@
         </div>
         <div class="field switch-field">
           <div>
-            <label>通用Compatibility image（自动管理）</label>
+            <label>通用兼容镜像（自动管理）</label>
             <span class="sub">现在只有一个 Android 14 通用镜像，x86 与 ARM 应用都能跑，首次遇到 ARM 应用时会自动下载，不需要手动切换。此开关仅用于旧配置兼容。</span>
           </div>
           <input type="checkbox" id="setCompat" class="switch" />
@@ -463,11 +463,11 @@
           <label>Compatibility image</label>
           <div class="row">
             <span class="inline-note" id="compatImgStatus">未下载</span>
-            <button class="btn ghost sm" id="btnInstallPlay">下载Compatibility image</button>
+            <button class="btn ghost sm" id="btnInstallPlay">Download compatibility image</button>
           </div>
         </div>
         <div class="runtime-actions">
-          <button class="btn ghost sm" id="btnRuntimeStart">启动Runtime</button>
+          <button class="btn ghost sm" id="btnRuntimeStart">Start runtime</button>
           <button class="btn ghost sm" id="btnRuntimeStop">停止内置虚拟机</button>
           <span class="inline-note" id="probeResult"></span>
         </div>
@@ -475,15 +475,15 @@
       </details>
 
       <div class="group">
-        <div class="group-title">安卓系统Settings（不用进安卓桌面）</div>
+        <div class="group-title">Android system settings (without opening the Android desktop)</div>
         <div class="field">
           <label>Runtime status</label>
           <div class="row">
-            <span class="inline-note" id="androidStatus">Runtime未启动</span>
+            <span class="inline-note" id="androidStatus">Runtime not started</span>
             <button class="btn ghost sm" id="btnAndroidRefresh">Refresh</button>
             <button class="btn ghost sm" id="btnAndroidTune">Optimize performance</button>
           </div>
-          <span class="sub">关闭System animations、放开后台进程上限并把当前应用加入电池白名单，低配电脑体感最明显。</span>
+          <span class="sub">关闭系统动画、放开后台进程上限并把当前应用加入电池白名单，低配电脑体感最明显。</span>
         </div>
         <div class="field switch-field">
           <div>
@@ -495,7 +495,7 @@
         <div class="field switch-field">
           <div>
             <label>Airplane mode</label>
-            <span class="sub">彻底断网（含移动数据），需要安静时Open。</span>
+            <span class="sub">彻底断网（含移动数据），需要安静时打开。</span>
           </div>
           <input type="checkbox" id="setAndroidAirplane" class="switch" />
         </div>
@@ -534,10 +534,10 @@
           </div>
         </div>
         <div class="runtime-actions">
-          <button class="btn ghost sm" id="btnAndroidSettings">安卓原生Settings</button>
-          <button class="btn ghost sm" id="btnAndroidDisplay">显示Settings</button>
-          <button class="btn ghost sm" id="btnAndroidSound">声音Settings</button>
-          <button class="btn ghost sm" id="btnAndroidLocale">语言Settings</button>
+          <button class="btn ghost sm" id="btnAndroidSettings">Native Android settings</button>
+          <button class="btn ghost sm" id="btnAndroidDisplay">Display settings</button>
+          <button class="btn ghost sm" id="btnAndroidSound">Sound settings</button>
+          <button class="btn ghost sm" id="btnAndroidLocale">Language settings</button>
           <button class="btn ghost sm" id="btnAndroidApps">App management</button>
         </div>
       </div>
@@ -564,7 +564,7 @@
         </div>
         <div class="runtime-actions">
           <button class="btn ghost sm" id="btnRebuildShortcuts">Rebuild shortcuts</button>
-          <span class="inline-note">桌面图标被误删或被安全软件拦掉时，点这里按当前Settings全部补齐。</span>
+          <span class="inline-note">桌面图标被误删或被安全软件拦掉时，点这里按当前设置全部补齐。</span>
         </div>
       </div>
 
@@ -579,13 +579,13 @@
             <button class="btn ghost sm" id="btnSyncShared">Sync now</button>
             <button class="btn primary sm" id="btnSaveShared">Save and move</button>
           </div>
-          <span class="sub">修改后旧目录里已有的文件会自动搬到新目录；正在运行的File sharing不受影响。</span>
+          <span class="sub">修改后旧目录里已有的文件会自动搬到新目录；正在运行的文件互通不受影响。</span>
         </div>
         <div class="field">
           <label>Android folder</label>
           <input id="setDeviceSharedDir" type="text" placeholder="/sdcard/ApkStartShared" />
         </div>
-        <p class="note">两侧目录会持续双向同步；在安卓应用里保存到该目录的文件，会出现在Local shared folder中。</p>
+        <p class="note">两侧目录会持续双向同步；在安卓应用里保存到该目录的文件，会出现在本机共享目录中。</p>
       </div>
 
       <div class="group">
@@ -598,7 +598,7 @@
           <button class="btn ghost sm" id="btnAssoc">检查中…</button>
         </div>
         <div class="field">
-          <label>Runtime数据目录（系统镜像 · 已装应用 · 快照）</label>
+          <label>运行时数据目录（系统镜像 · 已装应用 · 快照）</label>
           <div class="row">
             <input id="setRuntimeDir" type="text" readonly placeholder="默认：C 盘用户数据目录" />
             <button class="btn ghost sm" id="btnBrowseRuntimeDir">Browse</button>
@@ -609,11 +609,11 @@
         <div class="field">
           <label>安卓数据目录（应用、游戏与快速启动快照）</label>
           <div class="row">
-            <input id="setAvdDir" type="text" readonly placeholder="默认：Runtime目录下的 avd 文件夹" />
+            <input id="setAvdDir" type="text" readonly placeholder="默认：运行时目录下的 avd 文件夹" />
             <button class="btn ghost sm" id="btnBrowseAvdDir">Browse</button>
             <button class="btn ghost sm" id="btnOpenAvdDir">Open</button>
           </div>
-          <span class="sub">真正吃盘的是这一块：数据Partition（默认 6 GB，可在上面对大）+ 快速启动快照（约 2–3 GB）。
+          <span class="sub">真正吃盘的是这一块：数据分区（默认 6 GB，可在上面对大）+ 快速启动快照（约 2–3 GB）。
             磁盘紧张时把它指到另一个盘（如 D:），重启软件后生效；旧目录里的 <code>apkstart.avd</code> 可整体搬过去再删。</span>
         </div>
         <div class="field">
@@ -637,7 +637,7 @@
           <div class="update-bar" id="updateBar" hidden><i id="updateBarFill"></i></div>
           <span class="sub" id="updateNote">
             从 GitHub（RoutineMiku/apkstart）获取最新版本；轻量版会下载便携包并自动替换程序文件，
-            Runtime、已装应用与快照都不受影响。
+            运行时、已装应用与快照都不受影响。
           </span>
         </div>
       </div>
@@ -650,11 +650,11 @@
           </div>
           <div class="about-qrs">
             <div class="about-qr">
-              <img src="assets/wechat-qr.jpg" alt="WeChat official account QR code" width="112" height="112" />
+              <img src="assets/wechat-qr.jpg" alt="微信公众号二维码" width="112" height="112" />
               <span class="about-qr-tip">扫码关注公众号</span>
             </div>
             <div class="about-qr">
-              <img src="assets/douyin-qr.jpg" alt="Douyin QR code" width="112" height="112" />
+              <img src="assets/douyin-qr.jpg" alt="抖音二维码" width="112" height="112" />
               <span class="about-qr-tip">抖音 · 日常MIKU</span>
             </div>
           </div>
@@ -671,7 +671,7 @@
       </div>
     </div>
     <footer class="modal-foot">
-      <span class="inline-note">Settings修改后立即生效</span>
+      <span class="inline-note">Settings take effect immediately</span>
       <button class="btn primary" id="btnDoneSettings">完成</button>
     </footer>
   </div>

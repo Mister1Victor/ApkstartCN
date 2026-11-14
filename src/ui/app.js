@@ -36,9 +36,9 @@ function relTime(ts) {
   if (!ts) return '';
   const d = Date.now() - ts;
   if (d < 60000) return 'just now';
-  if (d < 3600000) return `${Math.floor(d / 60000)} 分钟前`;
-  if (d < 86400000) return `${Math.floor(d / 3600000)} 小时前`;
-  if (d < 86400000 * 30) return `${Math.floor(d / 86400000)} 天前`;
+  if (d < 3600000) return `${Math.floor(d / 60000)} min ago`;
+  if (d < 86400000) return `${Math.floor(d / 3600000)} hr ago`;
+  if (d < 86400000 * 30) return `${Math.floor(d / 86400000)} days ago`;
   return new Date(ts).toLocaleDateString('zh-CN');
 }
 
@@ -52,7 +52,7 @@ function relTime(ts) {
 let _toastSeq = 0;
 function toast({ title, body = '', type = 'info', progress = null, sticky = false, spinner = false }) {
   const wrap = $('toastWrap');
-  // ① 去重：同样的标题 + 正文（4 秒内）只刷新那一条，不叠加
+  // ① 去重：同样的标题 + 正文 (4 秒内)只刷新那一条，不叠加
   const key = `${title}|${body}`;
   const dup = [...wrap.children].find((n) => n.dataset.key === key && Date.now() - Number(n.dataset.at || 0) < 4000);
   if (dup) {
@@ -170,7 +170,7 @@ async function refreshApps() {
 
 function updateStats() {
   const n = state.apps.length;
-  $('statusStats').textContent = n ? `${n} 个应用` : '暂无应用';
+  $('statusStats').textContent = n ? `${n} apps` : 'No apps installed yet';
 }
 
 async function refreshStatus() {
@@ -233,14 +233,14 @@ async function refreshStatus() {
 
     renderSetup(s);
   } catch (e) {
-    $('statusText').textContent = `状态检查失败：${e.message}`;
+    $('statusText').textContent = `Status check failed: ${e.message}`;
   }
 }
 
-/* ---------------- 运行时部署（固定在设置里） ---------------- */
+/* ---------------- 运行时部署 (固定在设置里) ---------------- */
 
 /**
- * 运行时/部署/自检面板现在都收在「设置」里，主界面只留已安装应用。
+ * 运行时/部署/自检面板现在都收在「设置」里，主界面只留Installed应用。
  * 保留 showSetup 给托盘菜单与 ui:navigate 复用，语义改为「打开设置并定位到运行时」。
  */
 function showSetup(on) {
@@ -275,7 +275,7 @@ function renderSetup(s) {
   const hv = env.hypervisor || {};
   const accel = env.accel || s.accel || {};
 
-  // 启动即见已安装应用：不再用部署向导整屏接管主界面，
+  // 启动即见Installed应用：不再用部署向导整屏接管主界面，
   // 状态只在设置里的运行时面板 + 底部状态条上体现。
   const accelOk = accel.ok || hv.whpx;
   const adbDone = !!(env.adb && env.adb.ok);
@@ -289,12 +289,12 @@ function renderSetup(s) {
     if (!emuDone0) missing.push('Engine');
     if (!imgDone0) missing.push('System image');
     stateText.textContent = s.deviceOnline
-      ? `已就绪 · Android ${s.android || ''}`
+      ? `Ready · Android ${s.android || ''}`
       : s.phase === 'booting' || s.vmStarting
         ? 'Starting Android…'
         : allDone0
           ? 'All components ready · waiting to boot (starts when you open an app)'
-          : `缺少 ${missing.join(' and ')}${accelOk ? '' : ' (software emulation will be used without hardware acceleration)'}`;
+          : `Missing ${missing.join(' and ')}${accelOk ? '' : ' (software emulation will be used without hardware acceleration)'}`;
     stateText.title = s.autoProfile || accel.note || hv.note || '';
   }
 
@@ -303,7 +303,7 @@ function renderSetup(s) {
   const busy = state.setupBusy;
   const booting = s.phase === 'booting';
 
-  // 只保留一个步骤：下载、参数自适应、开机全部由「一键完成」串起来，
+  // 只保留一个步骤：下载 and 参数自适应 and 开机全部由「一键完成」串起来，
   // 且首次启动会在后台自动跑，用户不需要逐步点击。
   const allDone = !!(env.adb && env.adb.ok) && emuDone && imgDone;
   const left = [];
@@ -318,14 +318,14 @@ function renderSetup(s) {
     done: allDone,
     busy: !!busy,
     desc: s.deviceOnline
-      ? `Android ${s.android || ''} 已就绪 · 应用窗口会按屏幕自动适配`
+      ? `Android ${s.android || ''} is ready · app windows adapt to your screen`
       : booting
         ? 'Starting Android…'
         : allDone
           ? 'All components ready. Double-click any APK or desktop shortcut to boot'
-          : `还差 ${left.join(' and ')}；点下面「一键完成」，会在后台一次装好并自动开机`,
+          : `Still needed: ${left.join(' and ')}; click “Set up automatically” below to install everything in the background and boot`,
     actions: s.deviceOnline
-      ? '<button class="btn ghost sm" data-act="vmStop">停止运行时</button>'
+      ? '<button class="btn ghost sm" data-act="vmStop">Stop runtime</button>'
       : '',
   };
 
@@ -333,11 +333,11 @@ function renderSetup(s) {
   $('btnDeployAll').disabled = !!busy;
   $('btnDeployAll').textContent = busy ? 'Preparing…' : (allDone ? 'Complete · click to check again' : 'Set up automatically');
   // 「上次为什么没起来」优先显示落盘的失败记录：进程重启后内存里的 diagnosis 是空的，
-  // 只显示 autoProfile 会让用户完全看不出原因（issue #20/#25 的报告就是这样）。
+  // 只显示 autoProfile 会让用户完全看不出原因 (issue #20/#25 的报告就是这样)。
   const lf = s.lastFailure;
   const lastMsg = (lf && lf.diagnosis && lf.diagnosis.title)
-    ? `上次启动失败：${lf.diagnosis.title}`
-    : (s.diagnosis ? `上次启动自动诊断：${s.diagnosis.title}` : '');
+    ? `Last startup failed: ${lf.diagnosis.title}`
+    : (s.diagnosis ? `Last startup diagnosis: ${s.diagnosis.title}` : '');
   $('setupNote').textContent = lastMsg
     || s.autoProfile || 'Fully automatic: no image selection, acceleration setup, or memory tuning needed';
 }
@@ -456,15 +456,15 @@ async function markInstalled() {
 function friendlyInstallErrorText(msg) {
   const s = String(msg || 'Unknown error');
   if (/INSUFFICIENT_STORAGE|not enough space|空间不足|ENOSPC/i.test(s)) {
-    return `${s}\n安卓数据分区不够用：设置 → 性能与资源占用 → 安卓数据分区调大后点「立即扩容」。`;
+    return `${s}\nThe Android data partition is too small. Go to Settings → Performance & Resource Usage, increase the partition size, then click “Expand now”.`;
   }
-  if (/NO_MATCHING_ABIS/i.test(s)) return `${s}\n这个包只有 ARM 库，正在自动切换兼容镜像后重试。`;
+  if (/NO_MATCHING_ABIS/i.test(s)) return `${s}\nThis package contains only ARM libraries. Switching to a compatible image and retrying automatically.`;
   if (/INSTALL_FAILED_ALREADY_EXISTS|signatures do not match/i.test(s)) {
-    return `${s}\n同包名但签名不同（常见于从别的渠道装过）。在应用卡片右键「卸载」后再装。`;
+    return `${s}\nThe package name matches but the signature differs (often caused by installing from another source). Right-click the app card, choose “Uninstall”, then try again.`;
   }
-  if (/INSTALL_FAILED_VERSION_DOWNGRADE/i.test(s)) return `${s}\n已装版本更高，先在右键菜单里卸载再装。`;
+  if (/INSTALL_FAILED_VERSION_DOWNGRADE/i.test(s)) return `${s}\nA newer version is already installed. Uninstall it from the context menu before trying again.`;
   if (/ERR_FS_FILE_TOO_LARGE|greater than possible Buffer|Cannot allocate|ENOMEM|out of memory/i.test(s)) {
-    return `${s}\n这个安装包过大或内存不足，解析被系统拒绝了。请确认磁盘与内存充足后重试；`
+    return `${s}\nThe APK may be too large or memory may be insufficient. Check available disk space and memory, then try again; `
       + 'if it still fails, move the APK to a short path containing only English characters (e.g. D:\\a.apk).';
   }
   return s;
@@ -487,28 +487,28 @@ async function installFiles(paths) {
 
   for (const p of paths) {
     const name = p.split(/[\\/]/).pop();
-    const t = toast({ title: `正在安装 ${name}`, body: 'Parsing APK…', progress: 8, sticky: true, spinner: true });
+    const t = toast({ title: `Installing ${name}`, body: 'Parsing APK…', progress: 8, sticky: true, spinner: true });
     installToast = t;
     let off = () => {};
     try {
       off = api.on('install:progress', (pr) => {
         const base = { parse: 12, 'parse-done': 24, runtime: 38, install: 62, shortcut: 88, done: 100 }[pr.stage] || 50;
         const pct = pr.percent != null ? Math.min(60, Math.round((pr.percent / 100) * 60)) : base;
-        t.update({ title: pr.meta ? `正在安装 ${pr.meta.label}` : `正在安装 ${name}`, body: pr.message, progress: pct });
+        t.update({ title: pr.meta ? `Installing ${pr.meta.label}` : `Installing ${name}`, body: pr.message, progress: pct });
       });
       const r = await api.installApk(p);
-      t.update({ title: `${r.app.label} 已安装`, body: r.app.shortcutPath ? 'Desktop shortcut created. Double-click to launch the app.' : 'Right-click the app card to create a desktop shortcut.', progress: 100, type: 'ok' });
+      t.update({ title: `${r.app.label} Installed`, body: r.app.shortcutPath ? 'Desktop shortcut created. Double-click to launch the app.' : 'Right-click the app card to create a desktop shortcut.', progress: 100, type: 'ok' });
       t.el.querySelector('.spinner')?.remove();
       setTimeout(t.dismiss, 3600);
       if (r.warnings && r.warnings.length) {
-        toast({ title: `${r.app.label} 兼容性提示`, body: r.warnings.join(' '), type: 'error', sticky: false });
+        toast({ title: `${r.app.label} Compatibility notice`, body: r.warnings.join(' '), type: 'error', sticky: false });
       }
       ok++;
     } catch (e) {
       failed++;
-      // 先把那条「正在安装…」的 sticky 提示收掉，否则它会一直转圈、还继续被
+      // 先把那条「正在安装…」的 sticky 提示收掉，否则它会一直转圈 and 还继续被
       // 运行时日志刷新 —— 用户看到的就是「失败信息一直在循环」。
-      // 错误提示统一由下面的 install:error 监听器负责（带文件名与中文原因），
+      // 错误提示统一由下面的 install:error 监听器负责 (带文件名与中文原因)，
       // 这里不再重复弹一条。
       try { off(); } catch (_) { /* ignore */ }
       t.dismiss();
@@ -529,14 +529,14 @@ async function launchApp(pkg) {
   const app = state.apps.find((a) => a.package === pkg);
   state.launchPkg = pkg;
   const t = toast({
-    title: `正在打开 ${app ? app.label : pkg}`,
+    title: `Opening ${app ? app.label : pkg}`,
     body: 'Warming up the runtime for the first launch. Please wait…',
     sticky: true,
     spinner: true,
   });
   const r = await api.launch(pkg);
   if (r.ok) {
-    // 应用有自己的窗口，主界面自动收起；这里只留一句提示，然后隐藏窗口
+    // 应用有自己的窗口，主界面自动收起; 这里只留一句提示，然后隐藏窗口
     t.update({ title: 'Launched', body: 'The app is running in a separate window (use the top bar to rotate the screen).', type: 'ok' });
     setTimeout(t.dismiss, 1600);
     setTimeout(() => api.winHide(), 900);
@@ -560,7 +560,7 @@ async function createShortcut(pkg) {
 async function uninstall(pkg) {
   const app = state.apps.find((a) => a.package === pkg);
   if (!app) return;
-  const ok = window.confirm(`确定卸载「${app.label}」？\n\n应用数据会一并被清除，桌面快捷方式也会被删除。`);
+  const ok = window.confirm(`Uninstall “${app.label}”?\n\nThe app’s data and desktop shortcut will also be deleted.`);
   if (!ok) return;
   try {
     await api.uninstall(pkg);
@@ -618,7 +618,7 @@ async function handleMenu(act) {
     case 'pin': return api.pin(pkg, !app.pinned).then(refreshApps);
     case 'reveal': return api.revealApk(pkg);
     case 'clear': {
-      if (!window.confirm(`清除「${app.label}」的全部数据？此操作不可撤销。`)) return;
+      if (!window.confirm(`Clear all data for “${app.label}”? This action cannot be undone.`)) return;
       try {
         await api.clearData(pkg);
         toast({ title: 'App data cleared', body: app.label, type: 'ok' });
@@ -644,11 +644,11 @@ async function refreshAndroid() {
   el.textContent = 'Loading…';
   const r = await api.android.status().catch(() => null);
   if (!r || !r.ok) {
-    el.textContent = r && r.error ? `运行时未就绪（${String(r.error).slice(0, 36)}）` : 'Runtime is not running';
+    el.textContent = r && r.error ? `Runtime not ready (${String(r.error).slice(0, 36)})` : 'Runtime is not running';
     return;
   }
   el.textContent = `Android ${r.sdk || '?'} · ${r.wifi ? 'Wi-Fi on' : 'Wi-Fi off'}` +
-    `${r.airplane ? ' · Airplane mode' : ''} · 音量 ${r.volume}%`;
+    `${r.airplane ? ' · Airplane mode' : ''} · Volume ${r.volume}%`;
   $('setAndroidWifi').checked = !!r.wifi;
   $('setAndroidAirplane').checked = !!r.airplane;
   $('setAndroidAnim').checked = !r.animationsOff;
@@ -666,7 +666,7 @@ function bindAndroid() {
     const r = await api.android.set(key, value).catch(() => null);
     toast({
       type: r && r.ok ? 'ok' : 'error',
-      title: r && r.ok ? (msg || 'Applied') : `失败：${(r && r.error) || 'Runtime is not ready'}`,
+      title: r && r.ok ? (msg || 'Applied') : `Failed: ${(r && r.error) || 'Runtime is not ready'}`,
     });
     if (r && r.ok) refreshAndroid();
   };
@@ -749,7 +749,7 @@ async function refreshDataInfo() {
   const auto = Number(($('setDataGB') || {}).value || 0) === 0;
   const img = info.imageGB ? `${info.imageGB} GB` : 'Not created';
   const free = info.freeDiskMB ? `${(info.freeDiskMB / 1024).toFixed(1)} GB` : 'Unknown';
-  el.textContent = `当前数据分区镜像：${img}${auto ? '(Auto)' : ''} · 所在磁盘剩余 ${free}。`
+  el.textContent = `Current data partition image: ${img}${auto ? '(Auto)' : ''} · free disk space: ${free}。`
     + 'If a game reports “Insufficient storage”, increase this value and click “Expand now”. Expansion is in place; installed apps and saves are preserved.';
 }
 
@@ -776,7 +776,7 @@ async function openSettings() {
   }).catch(() => { $('autoProfileText').textContent = 'Automatic mode'; });
   api.runtimeUsage().then((u) => {
     $('usageText').textContent = u
-      ? `共 ${u.totalText}${u.reclaimable ? ` · 可回收 ${u.reclaimableText}（${u.count} 项）` : ' · 已是精简状态'}`
+      ? `Total ${u.totalText}${u.reclaimable ? ` · reclaimable ${u.reclaimableText} (${u.count} more)` : ' · Already optimized'}`
       : 'Statistics unavailable';
   }).catch(() => { $('usageText').textContent = 'Statistics unavailable'; });
 
@@ -793,7 +793,7 @@ function closeSettings() {
 
 let lastUpdate = null;
 
-/** 把一次检查结果画到设置面板（也用于启动时静默检查推送过来的状态） */
+/** 把一次检查结果画到设置面板 (也用于启动时静默检查推送过来的状态) */
 function renderUpdate(info) {
   lastUpdate = info || null;
   const cur = $('updateCurrent');
@@ -805,7 +805,7 @@ function renderUpdate(info) {
   if (info.current) cur.textContent = `v${info.current}`;
 
   if (info.ok === false) {
-    st.textContent = `检查失败：${info.error || 'Network unavailable'}`;
+    st.textContent = `检查Failed: ${info.error || 'Network unavailable'}`;
     // 检查失败也要给一条出路：直接把发布页打开，用户至少能手动下载。
     // 以前这里是「什么都不显示」，用户只会觉得「更新功能坏了」。
     showUpdateBtn(true);
@@ -816,25 +816,25 @@ function renderUpdate(info) {
     return;
   }
   if (info.hasUpdate) {
-    // 如实说明这次是哪个源给出的版本、另一个源为什么没参与 ——
+    // 如实说明这次是哪个源给出的版本 and 另一个源为什么没参与 ——
     // 用户排查「为什么检查更新很慢」时，这一行比任何日志都直接。
     const src = (info.sources || []).map((x) => `${x.name} ${x.tag || ''}`.trim()).join(' / ');
     const bad = (info.unreachable || []).map((x) => x.name).join(' and ');
     const stale = info.stale ? '(offline cache; may not be current)' : '';
-    st.textContent = `发现新版本 ${info.tag}${src ? `（${src}）` : ''}${bad ? `；${bad} 不可达` : ''}${stale}`;
+    st.textContent = `New version available ${info.tag}${src ? ` (${src})` : ''}${bad ? `; ${bad} unreachable` : ''}${stale}`;
     showUpdateBtn(true);
     btn.textContent = info.asset ? '立即更新' : 'Open download page';
     btn.dataset.mode = info.asset ? 'auto' : 'manual';
     const note = $('updateNote');
     if (note && info.notes) {
       const brief = String(info.notes).split('\n').slice(0, 8).join('\n').trim();
-      if (brief) note.textContent = `更新内容：\n${brief}`;
+      if (brief) note.textContent = `Release notes:\n${brief}`;
     }
     if (bar) bar.hidden = true;
   } else {
     const src = (info.sources || []).map((x) => x.name).join(' / ');
     const stale = info.stale ? '(offline cache)' : '';
-    st.textContent = `已是最新版本（v${info.current}）${src ? ` · 经由 ${src}` : ''}${stale}`;
+    st.textContent = `已是最新版本 (v${info.current})${src ? ` · 经由 ${src}` : ''}${stale}`;
     showUpdateBtn(false);
     if (bar) bar.hidden = true;
   }
@@ -854,7 +854,7 @@ function renderUpdateProgress(p) {
   const bar = $('updateBar');
   const fill = $('updateBarFill');
   if (p.stage === 'error') {
-    if (st) st.textContent = `更新失败：${p.message || ''}`;
+    if (st) st.textContent = `更新Failed: ${p.message || ''}`;
     if (bar) bar.hidden = true;
     toast({ title: '更新失败', body: p.message || '', type: 'error' });
     return;
@@ -880,10 +880,10 @@ function bindUpdate() {
       try {
         const info = await api.updateCheck();
         renderUpdate(info);
-        if (info && info.hasUpdate) toast({ title: `发现新版本 ${info.tag}`, body: 'Click “Update now” to download and install automatically', type: 'info' });
+        if (info && info.hasUpdate) toast({ title: `New version available ${info.tag}`, body: 'Click “Update now” to download and install automatically', type: 'info' });
         else if (info && info.ok !== false) toast({ title: '已是最新版本', body: `v${info.current}`, type: 'ok' });
       } catch (e) {
-        $('updateState').textContent = `检查失败：${e.message}`;
+        $('updateState').textContent = `检查Failed: ${e.message}`;
       } finally {
         check.disabled = false;
         check.textContent = old;
@@ -908,15 +908,15 @@ function bindUpdate() {
       go.disabled = false;
       go.textContent = '立即更新';
       if (r && r.error && !r.manual) {
-        $('updateState').textContent = `更新失败：${r.error}`;
+        $('updateState').textContent = `更新Failed: ${r.error}`;
         toast({ title: '更新失败', body: r.error, type: 'error' });
       }
     } else {
-      $('updateState').textContent = `已下载 v${r.version}，正在重启完成安装…`;
+      $('updateState').textContent = `Downloaded v${r.version}, restarting to finish installation…`;
     }
   });
 
-  // 打开设置时如果还没结果，就顺手查一次（放后台，不打扰）
+  // 打开设置时如果还没结果，就顺手查一次 (放后台，不打扰)
   runCheck(true).catch(() => {});
 }
 
@@ -945,7 +945,7 @@ function bindSettings() {
   });
   if ($('setResourceMode')) {
     $('setResourceMode').addEventListener('change', async (e) => {
-      // 资源策略会连带改 liteMode / priorityMode / renderSize（主进程里翻译）
+      // 资源策略会连带改 liteMode / priorityMode / renderSize (主进程里翻译)
       state.settings = await api.setSettings({ engine: { resourceMode: e.target.value } });
       fillSettings(state.settings);
       toast({ title: 'Resource profile updated', body: 'Takes effect the next time you open an app', type: 'ok' });
@@ -972,7 +972,7 @@ function bindSettings() {
       if (!gb) { toast({ title: 'Choose a size first', body: '“Auto” lets the app choose based on available disk space; no expansion needed', type: 'info' }); return; }
       const { response } = await api.confirm({
         title: 'Expand the Android data partition now?',
-        message: `将把 /data 调整为 ${gb} GB（就地扩容，已装应用和存档都会保留）。`,
+        message: `The /data partition will be resized to ${gb} GB (就地扩容，Installed apps和存档都会保留)。`,
         detail: 'Running Android apps must close first. The next launch will boot again and may take a few extra seconds.',
         okLabel: 'Start expansion',
       });
@@ -986,7 +986,7 @@ function bindSettings() {
       toast({
         type: r && r.ok ? 'ok' : 'error',
         title: r && r.ok ? 'Data partition expanded' : 'Expansion failed',
-        body: r && r.ok ? `现在约 ${r.imageGB || gb} GB 可用` : (r && r.error) || 'Unknown error',
+        body: r && r.ok ? `About ${r.imageGB || gb} GB available` : (r && r.error) || 'Unknown error',
       });
       refreshDataInfo();
     });
@@ -1087,11 +1087,11 @@ function bindSettings() {
       if (r.cancelled) return;
       toast({
         title: 'Cleanup complete',
-        body: `释放约 ${(r.saved / 1048576).toFixed(0)} MB（${r.removed.length} 项），已安装应用保留。`,
+        body: `Freed about ${(r.saved / 1048576).toFixed(0)} MB (${r.removed.length} more)，Installed应用保留。`,
         type: 'ok',
       });
       const u = await api.runtimeUsage();
-      $('usageText').textContent = `共 ${u.totalText} · 可回收 ${u.reclaimableText}（${u.count} 项）`;
+      $('usageText').textContent = `Total ${u.totalText} · reclaimable ${u.reclaimableText} (${u.count} more)`;
     } catch (e) {
       toast({ title: 'Cleanup failed', body: e.message, type: 'error' });
     } finally {
@@ -1099,7 +1099,7 @@ function bindSettings() {
     }
   });
 
-  // 重置安卓数据：二级确认（先确认意图，再确认不可撤销），清完刷新占用统计
+  // 重置安卓数据：二级确认 (先确认意图，再确认不可撤销)，清完刷新占用统计
   $('btnResetData').addEventListener('click', async () => {
     const btn = $('btnResetData');
     btn.disabled = true;
@@ -1134,11 +1134,11 @@ function bindSettings() {
       }
       toast({
         title: 'Android data reset',
-        body: `释放约 ${r.reclaimedMB} MB，已安装应用记录已清空。`,
+        body: `Freed about ${r.reclaimedMB} MB，Installed应用记录已清空。`,
         type: 'ok',
       });
       const u = await api.runtimeUsage();
-      $('usageText').textContent = `共 ${u.totalText} · 可回收 ${u.reclaimableText}（${u.count} 项）`;
+      $('usageText').textContent = `Total ${u.totalText} · reclaimable ${u.reclaimableText} (${u.count} more)`;
     } catch (e) {
       toast({ title: 'Reset failed', body: e.message, type: 'error' });
     } finally {
@@ -1146,9 +1146,9 @@ function bindSettings() {
     }
   });
 
-  // 修复网络：安卓里联网页面一直黑屏（红果点「同意并继续」后整屏黑）时用。
-  // 根因是虚拟机 /data 里的 Wi-Fi 配置坏了，wlan0 没起来、没有默认路由。
-  // Play Store 镜像不允许 root，只能整体重置 /data；应用清单保留，点开时会自动重装。
+  // Fix网络：安卓里联网页面一直黑屏 (红果点「同意并继续」后整屏黑)时用。
+  // 根因是虚拟机 /data 里的 Wi-Fi 配置坏了，wlan0 没起来 and 没有默认路由。
+  // Play Store 镜像不允许 root，只能整体重置 /data; 应用清单保留，点开时会自动重装。
   $('btnRepairNetwork').addEventListener('click', async () => {
     const btn = $('btnRepairNetwork');
     btn.disabled = true;
@@ -1205,12 +1205,12 @@ function bindSettings() {
       }
       const mb = Math.round((r.totalBytes || 0) / 1048576);
       const lines = items.slice(0, 8).map((x) => `• ${x.note}：${x.path}`);
-      if (items.length > 8) lines.push(`…另有 ${items.length - 8} 项`);
+      if (items.length > 8) lines.push(`…plus ${items.length - 8} more`);
       const ok = await api.confirm({
         type: 'warning',
         title: 'Remove leftovers from older versions?',
-        message: `找到 ${items.length} 项残留，约 ${mb} MB：`,
-        detail: `${lines.join('\n')}\n\n只删除「旧版本程序目录 / 已失效的卸载项 / 更新临时文件」，`
+        message: `Found ${items.length} more残留，约 ${mb} MB:`,
+        detail: `${lines.join('\n')}\n\nOnly old application folders, obsolete uninstall entries, and temporary update files will be removed.`
           + 'The currently running version and your app data will not be affected.',
         buttons: ['Cancel', 'Start cleanup'],
         defaultId: 1,
@@ -1222,14 +1222,14 @@ function bindSettings() {
         toast({ title: 'Cleanup failed', body: (c && c.error) || 'Please try again', type: 'error' });
         return;
       }
-      const failNote = (c.failed && c.failed.length) ? `，${c.failed.length} 项被占用未删` : '';
+      const failNote = (c.failed && c.failed.length) ? `，${c.failed.length} more被占用未删` : '';
       toast({
         title: 'Removed old-version leftovers',
-        body: `删除 ${c.removed.length} 项，释放 ${c.freedMB || 0} MB${failNote}。`,
+        body: `Removed ${c.removed.length} more，释放 ${c.freedMB || 0} MB${failNote}。`,
         type: 'ok',
       });
       const u = await api.runtimeUsage();
-      $('usageText').textContent = `共 ${u.totalText} · 可回收 ${u.reclaimableText}（${u.count} 项）`;
+      $('usageText').textContent = `Total ${u.totalText} · reclaimable ${u.reclaimableText} (${u.count} more)`;
     } catch (e) {
       toast({ title: 'Cleanup failed', body: e.message, type: 'error' });
     } finally {
@@ -1276,7 +1276,7 @@ function bindSettings() {
     }
   });
 
-  // 一键卸载 ApkStart 本体（取消 .apk 关联 + 启动卸载程序；便携版手动删除）
+  // 一键卸载 ApkStart 本体 (取消 .apk 关联 + 启动卸载程序; 便携版手动删除)
   $('btnUninstall').addEventListener('click', async () => {
     const ok = window.confirm('Uninstall ApkStart?\n\nThis will remove the .apk file association and uninstall the app. This cannot be undone.');
     if (!ok) return;
@@ -1287,7 +1287,7 @@ function bindSettings() {
       btn.disabled = false;
       toast({
         title: 'Portable version cannot be uninstalled automatically',
-        body: `请手动删除程序目录（${r.exeDir}）与数据目录（${r.dataDir}）`,
+        body: `请手动删除程序目录 (${r.exeDir})与数据目录 (${r.dataDir})`,
         type: 'info', sticky: true,
       });
       return;
@@ -1300,7 +1300,7 @@ function bindSettings() {
     toast({ title: 'Uninstalling…', body: 'The uninstaller has started. ApkStart will now exit', type: 'ok', sticky: true });
   });
 
-  // ARM 兼容镜像下载（带进度 toast）
+  // ARM 兼容镜像下载 (带进度 toast)
   $('btnInstallPlay').addEventListener('click', async () => {
     const btn = $('btnInstallPlay');
     btn.disabled = true;
@@ -1339,7 +1339,7 @@ function bindSettings() {
     $('compatInstallField').hidden = !on || !!ok;
     if (env.playImage) {
       $('compatImgStatus').textContent = ok
-        ? `已就绪（${(env.playImage.size / 1073741824).toFixed(2)} GB）` : 'Not downloaded';
+        ? `已Ready (${(env.playImage.size / 1073741824).toFixed(2)} GB)` : 'Not downloaded';
     }
   })();
   $('btnOpenData').addEventListener('click', async () => {
@@ -1356,7 +1356,7 @@ function bindSettings() {
     toast({ title: 'Data folder updated', body: 'Restart ApkStart for this change to take effect (existing data is not moved automatically)', type: 'ok', sticky: true });
   });
 
-  // 安卓数据目录（AVD + 快照）：真正吃盘的那块，单独指到别的盘
+  // 安卓数据目录 (AVD + 快照)：真正吃盘的那块，单独指到别的盘
   if ($('btnBrowseAvdDir')) {
     $('btnBrowseAvdDir').addEventListener('click', async () => {
       const picked = await api.openDir();
@@ -1387,7 +1387,7 @@ function bindSettings() {
       el.textContent = 'No running runtime found';
       return;
     }
-    el.textContent = `发现：${found.map((f) => f.name).join(' and ')}`;
+    el.textContent = `Found: ${found.map((f) => f.name).join(' and ')}`;
     await api.setSettings({ device: found[0].serial });
     $('setDevice').value = found[0].serial;
     refreshStatus();
@@ -1397,7 +1397,7 @@ function bindSettings() {
     const el = $('probeResult');
     el.textContent = 'Starting…';
     const r = await api.runtimeStart();
-    el.textContent = r.ok ? `已就绪：${r.engine}` : `启动失败：${r.error}`;
+    el.textContent = r.ok ? `Ready: ${r.engine}` : `启动Failed: ${r.error}`;
     refreshStatus();
   });
 
@@ -1591,11 +1591,11 @@ function bindEvents() {
 
   // 主进程事件
   api.on('install:error', (p) => {
-    // 报错了就别再让「正在安装…」那条一直转圈（可能来自双击 APK 的另一条链路）
+    // 报错了就别再让「正在安装…」那条一直转圈 (可能来自双击 APK 的另一条链路)
     if (installToast) { try { installToast.dismiss(); } catch (_) { /* ignore */ } installToast = null; }
     const name = p && p.file ? String(p.file).split(/[\\/]/).pop() : '';
     toast({
-      title: name ? `安装失败：${name}` : '安装失败',
+      title: name ? `安装Failed: ${name}` : '安装失败',
       body: friendlyInstallErrorText((p && p.message) || 'Unknown error'),
       type: 'error',
     });
@@ -1663,7 +1663,7 @@ function bindWelcome() {
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !mask.hidden) close(); });
 }
 
-/** 决定要不要弹：开机自启必弹；手动打开则每天最多一次，且用户可永久关闭 */
+/** 决定要不要弹：开机自启必弹; 手动打开则每天最多一次，且用户可永久关闭 */
 async function maybeShowWelcome() {
   const mask = $('welcomeMask');
   if (!mask) return;
@@ -1676,17 +1676,17 @@ async function maybeShowWelcome() {
   if (!(startupInfo && startupInfo.autostart) && cfg.lastDate === today) return;
 
   const h = new Date().getHours();
-  $('welcomeHi').textContent = `${greetingOf(h)}，欢迎回来`;
+  $('welcomeHi').textContent = `${greetingOf(h)}，Welcome back`;
   const ver = (startupInfo && startupInfo.version) || (state.status && state.status.version) || '';
   const ready = state.status && state.status.ready;
-  $('welcomeSub').textContent = `ApkStart${ver ? ` v${ver}` : ''} · ${ready ? '运行时就绪，点开即用' : '运行时会按需自动准备'}`;
+  $('welcomeSub').textContent = `ApkStart${ver ? ` v${ver}` : ''} · ${ready ? '运行时Ready，点开即用' : '运行时会按需自动准备'}`;
 
   const apps = (state.apps || []).length;
   const dev = $('statusDevice') ? $('statusDevice').textContent.trim() : '';
   const chips = [
-    { k: String(apps), v: '已装应用' },
-    { k: ready ? '就绪' : '待命', v: '安卓运行时' },
-    { k: dev ? dev.replace(/^.*?(\d+)/, '$1') : '—', v: '设备 / 端口' },
+    { k: String(apps), v: 'Installed apps' },
+    { k: ready ? 'Ready' : 'Idle', v: 'Android runtime' },
+    { k: dev ? dev.replace(/^.*?(\d+)/, '$1') : '—', v: 'Device / port' },
   ];
   $('welcomeStats').innerHTML = chips
     .map((c) => `<div class="welcome-stat"><b>${esc(c.k)}</b><span>${esc(c.v)}</span></div>`)
@@ -1706,14 +1706,14 @@ function renderWelcomeTips() {
   const apps = (state.apps || []).length;
   const tips = [];
   if (lastUpdate && lastUpdate.hasUpdate) {
-    tips.push(`发现新版本 <b>${esc(lastUpdate.tag || '')}</b>，可在「设置 → 软件更新」一键更新`);
+    tips.push(`New version available <b>${esc(lastUpdate.tag || '')}</b>; update with one click in Settings → Software Updates`);
   }
   if (!apps) {
-    tips.push('把 APK 拖进窗口就能安装，装完会自动生成桌面图标');
+    tips.push('Drag an APK into the window to install it. A desktop shortcut is created automatically.');
   } else {
-    tips.push('双击应用卡片即可在独立窗口中运行，右上角可旋转 / 缩放 / 关闭');
+    tips.push('Double-click an app card to run it in a separate window. Rotate, resize, or close it from the top-right corner.');
   }
-  tips.push('关窗口只是退出那个应用，安卓环境会留着，下次点开更快');
+  tips.push('Closing a window only exits that app. Android stays running, so the next launch is faster.');
   box.innerHTML = tips
     .map((t, i) => `<div class="welcome-tip"><i>${i + 1}</i><span>${t}</span></div>`)
     .join('');
@@ -1746,7 +1746,7 @@ function renderEnvCheck(r) {
   if (chip) {
     const errs = issues.filter((i) => i.severity === 'error').length;
     chip.hidden = issues.length === 0;
-    chip.textContent = errs ? `${errs} 项待修复` : `${issues.length} 项提示`;
+    chip.textContent = errs ? `${errs} more待Fix` : `${issues.length} more提示`;
     chip.className = `status-chip${errs ? ' err' : ''}`;
     chip.title = issues.map((i) => i.title).join('; ');
   }
@@ -1770,11 +1770,11 @@ function renderEnvCheck(r) {
   box.innerHTML = `
     <div class="env-check-head">
       <span class="ec-title">环境自检</span>
-      ${errs ? `<span class="ec-count">${errs} 个严重</span>` : ''}
-      ${warns ? `<span class="ec-count warn">${warns} 个提示</span>` : ''}
+      ${errs ? `<span class="ec-count">${errs} critical</span>` : ''}
+      ${warns ? `<span class="ec-count warn">${warns} notices</span>` : ''}
       <span class="ec-spacer"></span>
       <button class="btn ghost sm" id="btnEnvRecheck">重新检查</button>
-      <button class="btn primary sm" id="btnEnvFixAll">一键修复全部</button>
+      <button class="btn primary sm" id="btnEnvFixAll">一键Fix全部</button>
     </div>
     <div class="env-check-list">
       ${issues.map((i) => `
@@ -1784,7 +1784,7 @@ function renderEnvCheck(r) {
             <div class="ec-name">${esc(i.title)}</div>
             <div class="ec-hint">${esc(i.hint || '')}</div>
           </div>
-          ${i.fix ? `<button class="ec-fix" data-code="${esc(i.code)}">修复</button>` : ''}
+          ${i.fix ? `<button class="ec-fix" data-code="${esc(i.code)}">Fix</button>` : ''}
         </div>`).join('')}
     </div>`;
   const re = $('btnEnvRecheck');
@@ -1805,52 +1805,52 @@ async function fixIssue(issue) {
       const r = await api.installVcRedist().catch(() => ({ ok: false }));
       if (!r.ok && r.reason === 'no-installer') {
         api.openExternal('https://learn.microsoft.com/zh-CN/cpp/windows/latest-supported-vc-redist?view=msvc-170#visual-studio-2015-2017-2019-and-2022');
-        toast({ title: '未找到内置安装包', body: '已打开微软官方下载页，请下载 x64 版本', type: 'info' });
+        toast({ title: 'Built-in installer not found', body: 'Microsoft’s download page has been opened. Download the x64 version.', type: 'info' });
         break;
       }
       toast(r.ok
-        ? { title: 'VC++ 运行库已安装', type: 'ok' }
-        : { title: '安装未完成', body: r.error || 'Please try again', type: 'error' });
+        ? { title: 'VC++ 运行库Installed', type: 'ok' }
+        : { title: 'Installation incomplete', body: r.error || 'Please try again', type: 'error' });
       break;
     }
     case 'virtualization': {
-      const t = toast({ title: '正在开启硬件加速…', body: '请在弹出的窗口点「是」', sticky: true, spinner: true });
+      const t = toast({ title: 'Enabling hardware acceleration…', body: 'Click “Yes” in the permission window', sticky: true, spinner: true });
       const r = await api.enableVirtualization().catch(() => ({ ok: false }));
       if (r.ok) {
-        t.update({ title: 'Hardware acceleration enabled', body: r.restartNeeded ? '请重启电脑以获得最佳性能' : (r.note || ''), type: 'ok' });
+        t.update({ title: 'Hardware acceleration enabled', body: r.restartNeeded ? 'Restart your PC for best performance' : (r.note || ''), type: 'ok' });
         setTimeout(t.dismiss, 3200);
       } else {
-        t.update({ title: '未能开启', body: r.error || 'Please try again', type: 'error', sticky: true });
+        t.update({ title: 'Could not enable', body: r.error || 'Please try again', type: 'error', sticky: true });
       }
       break;
     }
     case 'disk': {
-      // 主进程会弹出原生确认框（含可释放空间预览），这里不再重复 confirm
+      // 主进程会弹出原生确认框 (含可释放空间预览)，这里不再重复 confirm
       const r = await api.runtimeCleanup({ apply: true }).catch(() => null);
       if (!r) { toast({ title: 'Cleanup failed', body: 'Please try again', type: 'error' }); break; }
       if (r.cancelled) break;
-      toast({ title: 'Cleanup complete', body: `释放约 ${((r.saved || 0) / 1048576).toFixed(0)} MB`, type: 'ok' });
+      toast({ title: 'Cleanup complete', body: `Freed about ${((r.saved || 0) / 1048576).toFixed(0)} MB`, type: 'ok' });
       break;
     }
     case 'path': {
-      toast({ title: '建议改到纯英文目录', body: '在 设置 → 系统集成 里修改「运行时数据目录」，再重启软件。', type: 'info', sticky: true });
+      toast({ title: 'Use a folder path containing only English characters', body: 'Change the Runtime data folder in Settings → System Integration, then restart the app.', type: 'info', sticky: true });
       openSettings();
       break;
     }
     case 'deploy': {
-      toast({ title: '正在补齐缺失的运行时组件…', type: 'info', sticky: true, spinner: true });
+      toast({ title: 'Installing missing runtime components…', type: 'info', sticky: true, spinner: true });
       await deployAll();
       break;
     }
     case 'lock': {
       const r = await api.clearLocks().catch(() => ({ ok: false }));
-      toast(r.ok ? { title: '已清理残留锁文件', type: 'ok' } : { title: 'Cleanup failed', body: r.error, type: 'error' });
+      toast(r.ok ? { title: 'Removed stale lock files', type: 'ok' } : { title: 'Cleanup failed', body: r.error, type: 'error' });
       break;
     }
     default:
-      toast({ title: '暂不支持自动修复', body: issue.hint || '', type: 'info' });
+      toast({ title: '暂不支持自动Fix', body: issue.hint || '', type: 'info' });
   }
-  // 修复后重新自检，刷新横幅与状态
+  // Fix后重新自检，刷新横幅与状态
   setTimeout(selfCheck, 600);
   setTimeout(refreshStatus, 600);
 }
@@ -1867,5 +1867,5 @@ async function fixAllIssues(issues) {
 
 init().catch((e) => {
   console.error(e);
-  toast({ title: '初始化失败', body: e.message, type: 'error', sticky: true });
+  toast({ title: 'Initialization failed', body: e.message, type: 'error', sticky: true });
 });

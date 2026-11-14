@@ -305,7 +305,7 @@ function openAppWindow(pkg, tip) {
     fullscreen: displaySettings().mode === 'fullscreen',
   });
   appWin.setIcon(rec && rec.icoPath);
-  appWin.setState({ tip: tip || '正在启动安卓运行时…', ready: false, landscape: false });
+  appWin.setState({ tip: tip || 'Starting Android runtime…', ready: false, landscape: false });
   currentAppPkg = pkg;
 }
 
@@ -341,25 +341,25 @@ async function autoDeploy() {
     // 整包拿不到（没网 / 还没发过该资产 / 被限流）再逐个从官方源装。
     if (needEngine && store.getSettings().runtime.preferGithubRuntime !== false) {
       try {
-        progress({ message: '正在从 GitHub 下载运行时…' });
+        progress({ message: 'Downloading runtime from GitHub…' });
         await runtime.provisioner.installRuntimePack(progress);
         const afterPack = await runtime.provisioner.checkEnv();
         if (afterPack.emulator.ok && afterPack.sysimg.ok) return { ok: true, source: 'github' };
-        progress({ message: '运行时整包不完整，改用官方源补齐…' });
+        progress({ message: 'Runtime package is incomplete; downloading missing components from official sources…' });
       } catch (e) {
         progress({ message: `GitHub 运行时不可用（${e.message}），改用官方源…` });
       }
     }
     if (!env.adb.ok) {
-      progress({ message: '正在准备 adb…' });
+      progress({ message: 'Preparing adb…' });
       await runtime.provisioner.installAdb(progress);
     }
     if (!env.emulator.ok) {
-      progress({ message: '正在准备 Android 运行时…' });
+      progress({ message: 'Preparing Android runtime…' });
       await runtime.provisioner.installEmulator(progress);
     }
     if (!env.sysimg.ok) {
-      progress({ message: '正在准备 Android 系统镜像…' });
+      progress({ message: 'Preparing Android system image…' });
       await runtime.provisioner.installSystemImage(progress);
     }
     const after = await runtime.provisioner.checkEnv();
@@ -402,7 +402,7 @@ function enableWindowsFeature(feature) {
     const proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps],
       { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     proc.on('exit', (code) => resolve({ ok: code === 0, restart: true, code }));
-    proc.on('error', () => resolve({ ok: false, error: '无法启动 PowerShell' }));
+    proc.on('error', () => resolve({ ok: false, error: 'Unable to start PowerShell' }));
   });
 }
 
@@ -455,7 +455,7 @@ function createWindow({ show = true } = {}) {
     if (quitting) return;
     e.preventDefault();
     mainWindow.hide();
-    notify('ApkStart 仍在后台运行', '点击托盘图标可重新打开；右键托盘可退出。');
+    notify('ApkStart is still running in the background', 'Click the tray icon to reopen; right-click it to quit.');
   });
 
   if (IS_DEV) mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -493,19 +493,19 @@ function buildTray() {
   const refresh = () => {
     const apps = store.getApps().slice(0, 8);
     const menu = Menu.buildFromTemplate([
-      { label: '打开 ApkStart', click: () => showWindow() },
+      { label: 'Open ApkStart', click: () => showWindow() },
       { type: 'separator' },
       ...(apps.length
         ? apps.map((a) => ({ label: a.label, click: () => runLaunch(a.package) }))
-        : [{ label: '还没有安装应用', enabled: false }]),
+        : [{ label: 'No apps installed yet', enabled: false }]),
       { type: 'separator' },
       {
-        label: displaySettings().mode === 'fullscreen' ? '切回竖屏窗口' : '全屏（自适应屏幕）',
+        label: displaySettings().mode === 'fullscreen' ? 'Switch to portrait window' : 'Fullscreen (fit to screen)',
         click: () => { toggleDisplayMode(); },
       },
-      { label: '重建桌面/开始菜单快捷方式', click: () => { installer.ensureShortcuts().catch(() => {}); } },
-      { label: '同步共享目录', click: () => sharer.sync() },
-      { label: '设置', click: () => { showWindow(); send('ui:navigate', 'settings'); } },
+      { label: 'Rebuild Desktop / Start menu shortcuts', click: () => { installer.ensureShortcuts().catch(() => {}); } },
+      { label: 'Sync shared folder', click: () => sharer.sync() },
+      { label: 'Settings', click: () => { showWindow(); send('ui:navigate', 'settings'); } },
       {
         label: updateInfo && updateInfo.hasUpdate ? `发现新版本 ${updateInfo.tag}` : '检查更新',
         click: async () => {
@@ -516,22 +516,22 @@ function buildTray() {
           if (info && info.hasUpdate && info.asset) {
             const r = await dialog.showMessageBox(mainWindow || undefined, {
               type: 'question',
-              title: '发现新版本',
+              title: 'Update available',
               message: `ApkStart ${info.tag} 已发布，当前版本 v${app.getVersion()}。现在更新吗？`,
               detail: (info.notes || '').slice(0, 600),
-              buttons: ['立即更新', '稍后'],
+              buttons: ['Update now', 'Later'],
               defaultId: 0,
               cancelId: 1,
             });
             if (r.response === 0) runUpdate();
           } else if (info && !info.hasUpdate) {
-            notify('已是最新版本', `ApkStart v${app.getVersion()}`);
+            notify('Already up to date', `ApkStart v${app.getVersion()}`);
           }
         },
       },
       { type: 'separator' },
       {
-        label: '退出',
+        label: 'Quit',
         click: async () => {
           try { appWin.close({ keepApp: true }); } catch (_) { /* ignore */ }
           quitting = true;
@@ -541,7 +541,7 @@ function buildTray() {
     ]);
     tray.setContextMenu(menu);
   };
-  tray.setToolTip('ApkStart — 安卓应用运行器');
+  tray.setToolTip('ApkStart — Android App Launcher');
   // Windows 托盘的惯例是单击就打开主窗口（双击当然也可以）。
   // 之前只绑了 double-click，用户单击没反应，会以为托盘图标坏了。
   // 右键才出菜单，所以这里单击直接 showWindow 不会和菜单冲突。
@@ -631,7 +631,7 @@ async function runLaunch(pkg) {
   appLog(`launch start ${pkg}`);
   try {
     // 1) 先把「应用窗口」打开显示启动动画：整个过程看不到安卓桌面，也看不到模拟器窗口
-    openAppWindow(pkg, '正在启动安卓运行时…');
+    openAppWindow(pkg, 'Starting Android runtime…');
     // 开机阶段把模拟器主窗 + qemu / netsimd 的控制台黑窗藏起来，避免任何闪现。
     // 压制是常驻的（embed 后它会自动跳过被嵌入的那一个窗口，见 appwin.embed）。
     // 这里必须 await：不等压制生效就往下走，黑窗会在启动瞬间露出来。
@@ -1679,7 +1679,7 @@ if (!gotLock) {
       const dirs = agentScope();
       // 第二个参数是本进程 pid：代理据此拒绝把窗口嵌进「不是我们的」窗口
       await agent.scope(dirs, process.pid).catch(() => null);
-      if (!dirs.length) appLog('agent scope 为空：不压制任何窗口（避免误伤其他软件）');
+      if (!dirs.length) appLog('Agent scope is empty; no windows will be suppressed (to avoid affecting other applications)');
       return agent.bootHide().catch(() => ({ ok: false }));
     };
 

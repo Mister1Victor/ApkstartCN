@@ -166,7 +166,7 @@
             <li><b>cfdisk 分区</b>：<code>New</code> → <code>Primary</code> → 容量直接回车 → <code>Bootable</code> → <code>Write</code> → 输入 <code>yes</code> → <code>Quit</code></li>
             <li><b>Format</b>：选 <code>vda1</code> → 提示格式化时选 <code>ext4</code> → <code>Yes</code></li>
             <li><b>Bootloader & system</b>：<code>Install GRUB</code> 选 <code>Yes</code>；<code>Install /system as read-write</code> 选 <code>Yes</code></li>
-            <li><b>完成</b>：进度到 100% 后点下面的「我已安装完成」（ApkStart 会自动重启并接管）</li>
+            <li><b>Done</b>：进度到 100% 后点下面的「我已安装完成」（ApkStart 会自动重启并接管）</li>
           </ol>
           <p class="guide-tip">如果之后提示 adb 未连接：在虚拟机窗口按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F1</kbd> 进入终端，执行
             <code>setprop service.adb.tcp.port 5555</code>、<code>stop adbd</code>、<code>start adbd</code>，
@@ -183,12 +183,12 @@
         <div class="field">
           <label>Auto-detected system settings</label>
           <div class="inline-note" id="autoProfileText">Detecting…</div>
-          <span class="sub">内存、核心数、渲染后端、端口、加速方式全部自动选择；启动失败会自动降级重试，不需要手动改。</span>
+          <span class="sub">Memory, CPU cores, rendering backend, ports, and acceleration are selected automatically. If startup fails, ApkStart retries with fallback settings.</span>
         </div>
         <div class="field">
           <label>Total disk usage (runtime + Android data + cache)</label>
           <div class="row">
-            <span class="inline-note" id="usageText">正在统计…</span>
+            <span class="inline-note" id="usageText">Calculating…</span>
             <button class="btn ghost sm" id="btnCleanup">Clean up reclaimable files</button>
             <button class="btn ghost sm" id="btnLeftovers" title="扫描并清掉旧版本留下的程序目录、失效的卸载项和更新临时文件">Remove leftovers from older versions</button>
             <button class="btn ghost sm" id="btnRepairNetwork" title="安卓虚拟机没有网络时（应用里联网页面一直黑屏/转圈），用这个把安卓数据重置掉来修网络。应用清单会保留，点开应用会自动重装">Repair network</button>
@@ -196,19 +196,19 @@
           </div>
           <label class="checkbox-inline">
             <input type="checkbox" id="chkCleanSnapshots" />
-            <span>连当前 AVD 的快速启动快照也一起清（会先停运行时，能真正回收几 GB 快照）</span>
+            <span>Also delete the current AVD quick-boot snapshot (the runtime stops first; this can reclaim several GB).</span>
           </label>
-          <span class="sub">系统镜像全机共享一份，应用数据用差分层保存；旧镜像、旧快照、日志和锁文件都可回收。日志超过上限会自动滚动，不会无限增长。「重置安卓数据」会真实删除数 GB 用户数据，仅保留系统本身。</span>
+          <span class="sub">The system image is shared by all apps, while app data is stored in separate layers. Old images, snapshots, logs, and lock files can be reclaimed. Logs rotate automatically. “Reset Android data” permanently deletes several GB of user data while keeping the system image.</span>
         </div>
         <div class="runtime-actions">
           <button class="btn ghost sm" id="btnDiagnostics">Export diagnostic report</button>
           <button class="btn ghost sm" id="btnRebuildShortcuts">Rebuild shortcuts</button>
-          <span class="inline-note">诊断报告用于排障；重建会补齐桌面 + 开始菜单入口</span>
+          <span class="inline-note">Diagnostic reports help troubleshoot issues. Rebuild restores Desktop and Start menu shortcuts.</span>
         </div>
         <div class="field switch-field">
           <div>
-            <label>开机自动启动（默认开启）</label>
-            <span class="sub">随 Windows 登录常驻托盘，双击桌面图标秒开应用，无需手动启动。</span>
+            <label>Launch at startup (enabled by default)</label>
+            <span class="sub">Start with Windows and stay in the system tray. Double-click a desktop shortcut to launch an app without starting ApkStart manually.</span>
           </div>
           <input type="checkbox" id="setAutoStart" class="switch" />
         </div>
@@ -227,12 +227,12 @@
         <div class="field" id="portraitField">
           <label>Portrait resolution</label>
           <select id="setPortrait">
-            <option value="720x1280">小 · 720 × 1280</option>
-            <option value="900x1600">中 · 900 × 1600</option>
-            <option value="1080x1920">大 · 1080 × 1920</option>
-            <option value="1440x2560">超大 · 1440 × 2560</option>
+            <option value="720x1280">Small · 720 × 1280</option>
+            <option value="900x1600">Medium · 900 × 1600</option>
+            <option value="1080x1920">Large · 1080 × 1920</option>
+            <option value="1440x2560">Extra large · 1440 × 2560</option>
           </select>
-          <span class="sub">窗口模式下可拖动边框任意缩放；这里调的是 Android 内部渲染尺寸，越小越省性能。</span>
+          <span class="sub">In windowed mode, drag the borders to resize freely. This controls Android’s internal rendering resolution; lower values use fewer resources.</span>
         </div>
       </div>
 
@@ -240,33 +240,33 @@
         <div class="group-title">Mouse controls</div>
         <div class="field">
           <label>Left button · Confirm / tap</label>
-          <span class="sub">模拟器原生把左键当成手指点击，按住拖动就是滑动，无需额外设置。</span>
+          <span class="sub">The emulator treats the left button as a finger tap; click and drag to swipe. No extra setup is needed.</span>
         </div>
         <div class="field switch-field">
           <div>
             <label>Right button · Android Back</label>
-            <span class="sub">模拟器默认把右键也当成一次点击（容易误触）。开启后右键只执行返回，不再触发点击。</span>
+            <span class="sub">By default, the emulator treats right-click as a tap (easy to trigger accidentally). Enable this to make right-click perform Back only.</span>
           </div>
           <input type="checkbox" id="setMouseRightBack" class="switch" />
         </div>
         <div class="field">
           <label>Mouse wheel · Scroll</label>
           <select id="setMouseWheelMode">
-            <option value="smooth">平滑（推荐）· 合并多次滚动为一次流畅滑动</option>
-            <option value="native">原生 · 交给模拟器逐格处理</option>
-            <option value="off">关闭 · 不拦截滚轮</option>
+            <option value="smooth">Smooth (recommended) · Combine wheel events into one fluid swipe</option>
+            <option value="native">Native · Let the emulator process each wheel step</option>
+            <option value="off">Off · Do not intercept the wheel</option>
           </select>
-          <span class="sub">平滑模式把一小段时间内的滚动合并成一次滑动手势，避免逐格抽搐，也不会每格都拉起一个 adb 进程。</span>
+          <span class="sub">Smooth mode combines wheel events over a short interval into one swipe, avoiding choppy scrolling and repeated adb process launches.</span>
         </div>
         <div class="field switch-field">
           <div>
-            <label>鼠标侧键 · 返回 / 前进（默认关闭）</label>
-            <span class="sub">侧键映射需要全局鼠标钩子。钩子只在 ApkStart 应用窗口处于前台时安装，失焦或关闭立即卸载，不会拖慢桌面。</span>
+            <label>Mouse side buttons · Back / Forward (off by default)</label>
+            <span class="sub">Side-button mapping uses a global mouse hook. It is active only while an ApkStart app window is focused and is removed immediately when focus is lost or the window closes.</span>
           </div>
           <input type="checkbox" id="setMouseSideButtons" class="switch" />
         </div>
         <div class="field">
-          <span class="sub">以上映射只在应用窗口前台生效；切回桌面或关闭窗口后，鼠标行为完全恢复 Windows 原生。</span>
+          <span class="sub">These mappings apply only while an app window is focused. Mouse behavior returns to normal Windows behavior when you switch to the desktop or close the window.</span>
         </div>
       </div>
 
@@ -275,20 +275,20 @@
         <div class="field">
           <label>Resource profile</label>
           <select id="setResourceMode">
-            <option value="save">省资源 · 2 核 / 让出前台 / 540p（老机器、挂机）</option>
-            <option value="balanced">均衡 · 一半物理核 / 让出前台 / 720p（推荐）</option>
-            <option value="smooth">流畅 · 不限核数 / 与前台同优先级（视频、游戏）</option>
+            <option value="save">Power saving · 2 cores / lower priority / 540p (older PCs, background use)</option>
+            <option value="balanced">Balanced · half of physical cores / lower priority / 720p (recommended)</option>
+            <option value="smooth">Performance · all cores / same priority as foreground (video, games)</option>
           </select>
-          <span class="sub">决定安卓虚拟机吃多少 CPU、画面多细腻。红果/抖音发卡就切「流畅」，只想挂着跑小应用就切「省资源」。改完下一次打开应用生效。</span>
+          <span class="sub">Controls Android VM CPU usage and visual quality. Choose “Performance” for demanding apps, or “Power saving” for lightweight background apps. Changes take effect the next time you open an app.</span>
         </div>
         <div class="field two">
           <div>
             <label>Graphics quality (Android rendering resolution)</label>
             <select id="setRenderSize">
               <option value="auto">自动（按加速状态）</option>
-              <option value="540x960">流畅 · 540 × 960</option>
-              <option value="720x1280">均衡 · 720 × 1280</option>
-              <option value="1080x1920">高清 · 1080 × 1920</option>
+              <option value="540x960">Performance · 540 × 960</option>
+              <option value="720x1280">Balanced · 720 × 1280</option>
+              <option value="1080x1920">High definition · 1080 × 1920</option>
             </select>
           </div>
           <div>
@@ -307,7 +307,7 @@
         <div class="field">
           <div class="row">
             <button class="btn ghost sm" id="btnGrowData">Expand now</button>
-            <span class="sub" style="flex:1;margin:0">扩容是就地做的：已装应用与存档都保留，只是下次打开应用会多花十几秒。</span>
+            <span class="sub" style="flex:1;margin:0">Expansion is performed in place. Installed apps and saves are preserved; the next launch may take a few extra seconds.</span>
           </div>
         </div>
         <div class="field">
@@ -316,21 +316,21 @@
         <div class="field switch-field">
           <div>
             <label>Network acceleration (recommended)</label>
-            <span class="sub">给安卓指定国内公共 DNS（阿里 / 腾讯）。安卓默认走主机的 DNS，主机挂着 VPN 或走公司网时解析会拖到几百毫秒，视频类应用首屏发慢。内网域名访问异常时可关掉。</span>
+            <span class="sub">Assign public DNS servers (Alibaba / Tencent) to Android. By default, Android uses the host DNS, which can be slow when using a VPN or corporate network. Turn this off if internal domains stop resolving.</span>
           </div>
           <input type="checkbox" id="setFastDns" class="switch" />
         </div>
         <div class="field switch-field">
           <div>
             <label>Android audio</label>
-            <span class="sub">让应用提示音、视频声音正常播放。仅在你完全不需要声音、想再省一点 CPU 时关闭。</span>
+            <span class="sub">Enables app sounds and video audio. Turn off only if you do not need audio and want to save a little CPU.</span>
           </div>
           <input type="checkbox" id="setAudio" class="switch" />
         </div>
         <div class="field switch-field">
           <div>
             <label>Keep quick-boot snapshot (recommended)</label>
-            <span class="sub">第二次打开应用只要几秒，代价是磁盘上多一份约 2–3 GB 的 <code>ram.bin</code>。磁盘紧张可以关掉：只影响启动速度，不影响应用与存档。</span>
+            <span class="sub">第二次打开应用只要几秒，代价是磁盘上多一份约 2–3 GB 的 <code>ram.bin</code>. Disable this if disk space is limited; it affects startup speed only, not apps or saves.</span>
           </div>
           <input type="checkbox" id="setKeepSnapshot" class="switch" />
         </div>
@@ -339,35 +339,35 @@
           <div class="field switch-field">
             <div>
               <label>Lightweight container</label>
-              <span class="sub">收敛 vCPU 配额并降低进程优先级，CPU 优先让给 Windows 桌面。上面的「资源策略」已经会自动设置这一项。</span>
+              <span class="sub">Reduce the vCPU quota and process priority so Windows gets CPU time first. The Resource profile above configures this automatically.</span>
             </div>
             <input type="checkbox" id="setLiteMode" class="switch" />
           </div>
           <div class="field">
             <label>Virtual machine priority</label>
             <select id="setPriorityMode">
-              <option value="balanced">均衡（推荐）· 运行时让着前台窗口</option>
-              <option value="performance">性能优先 · 运行时与前台同等优先级</option>
+              <option value="balanced">Balanced (recommended) · Runtime yields to foreground windows</option>
+              <option value="performance">Performance · Runtime has the same priority as foreground apps</option>
             </select>
-            <span class="sub">没有应用窗口时，容器一律自动降到最低优先级停放。</span>
+            <span class="sub">When no app windows are open, the container automatically drops to the lowest priority.</span>
           </div>
         </details>
         <div class="field switch-field">
           <div>
             <label>Deep-trim Android background services</label>
-            <span class="sub">额外禁用 Play 商店、设置向导、打印服务等后台包，只留打开应用必需的环境。若遇到应用提示缺少 Google Play 服务，关掉此开关会自动恢复。</span>
+            <span class="sub">Disable background packages such as Play Store, Setup Wizard, and print services, keeping only what apps need. If an app reports missing Google Play services, turn this off to restore them.</span>
           </div>
           <input type="checkbox" id="setDeepTrim" class="switch" />
         </div>
         <div class="field switch-field">
           <div>
             <label>Prewarm at startup (recommended)</label>
-            <span class="sub">启动 ApkStart 后就在后台把安卓环境引导好（窗口全程隐藏，不会看到模拟器）。之后点任何应用只剩一次「打开」，实测从 20 多秒降到几乎不用等。代价是空闲时常驻约 1GB 内存，关掉后第一次打开应用需要冷启动。</span>
+            <span class="sub">After ApkStart starts, Android is booted in the background with its window hidden. Apps then launch almost instantly instead of taking 20+ seconds. The trade-off is about 1 GB of idle memory usage; when disabled, the first app launch requires a cold boot.</span>
           </div>
           <input type="checkbox" id="setPrewarm" class="switch" />
         </div>
         <div class="field">
-          <span class="sub">安卓环境只开机一次并常驻；之后打开应用不再重跑整个系统，只启动该应用并停掉其他应用进程。关掉最后一个窗口会清后台、停放容器，下次点开仍是秒进。</span>
+          <span class="sub">Android boots once and stays running. Launching an app starts only that app rather than rebooting the system. Closing the last window cleans up background processes and parks the container.</span>
         </div>
       </div>
 
@@ -380,30 +380,30 @@
             <option value="gitee">Gitee only (usually fastest in China)</option>
             <option value="github">GitHub only</option>
           </select>
-          <span class="sub">「自动」会同时问 GitHub 与 Gitee 的最新版本，把每个下载地址都真下 256KB 测一次速度，再从最快的那个地址下载；其中一个源不通不影响更新。</span>
+          <span class="sub">Auto checks GitHub and Gitee for the latest version, downloads 256 KB from each candidate URL to measure speed, then uses the fastest. An unavailable source will not block an update.</span>
         </div>
         <div class="field switch-field">
           <div>
             <label>Try public acceleration mirrors automatically</label>
-            <span class="sub">GitHub 直连太慢时，额外测速 ghfast.top / gh-proxy.com 这两个公开转发服务（只转发公开的发布文件，不涉及账号）。关掉后只用直连和你自己填的前缀。</span>
+            <span class="sub">If GitHub is slow, also test the public ghfast.top and gh-proxy.com proxies (public release files only; no account access). When disabled, only direct connections and your custom prefix are used.</span>
           </div>
           <input type="checkbox" id="setAutoMirror" class="switch" />
         </div>
         <div class="field">
           <label>Download mirror prefix (optional; speeds up GitHub)</label>
-          <input id="setMirrorPrefix" type="text" placeholder="例如 https://ghfast.top/" />
-          <span class="sub">填了就只用你填的前缀，不再尝试上面那两个公共镜像；留空则由「自动」逻辑决定。下载器会把它拼在真实地址前面。</span>
+          <input id="setMirrorPrefix" type="text" placeholder="For example: https://ghfast.top/" />
+          <span class="sub">If set, only your prefix is used instead of the two public mirrors above. Leave blank to let Auto decide. The downloader prepends it to the original URL.</span>
         </div>
         <div class="field">
           <label>Download threads (1–16; default: 8)</label>
           <input id="setConnections" type="number" min="1" max="16" step="1" />
-          <span class="sub">大文件按块并行下载。默认 8 线程已经能跑满大多数家宽；网络稳定时可以试 16。</span>
+          <span class="sub">Large files are downloaded in parallel chunks. Eight threads are sufficient for most home connections; try 16 on a stable network.</span>
         </div>
         <details class="mini-details">
           <summary>Gitee update source (optional)</summary>
           <div class="field">
             <label>Gitee 只读 token（一般不用填）</label>
-            <input id="setGiteeToken" type="password" placeholder="留空即可：公开仓库匿名也能读" />
+            <input id="setGiteeToken" type="password" placeholder="Leave blank: public repositories can be read anonymously" />
             <span class="sub">本项目仓库已公开，Gitee 的发行版列表匿名就能读，留空也能用 Gitee 源。
               只有在「Gitee 被限流（返回 403/429）」或你想读私有分支时才需要填：
               gitee.com → 设置 → 私人令牌，只勾「projects」即可，它只用于读取发行版列表，
@@ -419,13 +419,13 @@
         <div class="field">
           <label>Engine mode</label>
           <select id="setEngineMode">
-            <option value="builtin">自带运行时（推荐，QEMU + Android-x86，无第三方依赖）</option>
-            <option value="attach">连接已有运行时（高级：复用 WSA / 其他模拟器的 adb 端口）</option>
+            <option value="builtin">Built-in runtime (recommended; QEMU + Android-x86, no third-party dependencies)</option>
+            <option value="attach">Connect existing runtime (advanced; reuse WSA or another emulator’s adb port)</option>
           </select>
         </div>
         <div class="field">
           <label>adb path</label>
-          <input id="setAdbPath" type="text" placeholder="留空则自动在 PATH / Android SDK 中查找" />
+          <input id="setAdbPath" type="text" placeholder="Leave blank to search PATH / Android SDK automatically" />
         </div>
         <div class="field">
           <label>Device address</label>
@@ -436,7 +436,7 @@
         </div>
         <div class="field">
           <label>System image (ISO)</label>
-          <input id="setSystemImage" type="text" placeholder="Android-x86 / Bliss OS 的 ISO 或 IMG 路径，留空使用默认位置" />
+          <input id="setSystemImage" type="text" placeholder="Path to Android-x86 / Bliss OS ISO or IMG; leave blank to use the default location" />
         </div>
         <div class="field two">
           <div>
@@ -455,7 +455,7 @@
         <div class="field switch-field">
           <div>
             <label>通用兼容镜像（自动管理）</label>
-            <span class="sub">现在只有一个 Android 14 通用镜像，x86 与 ARM 应用都能跑，首次遇到 ARM 应用时会自动下载，不需要手动切换。此开关仅用于旧配置兼容。</span>
+            <span class="sub">A single universal Android 14 image supports both x86 and ARM apps. It downloads automatically when an ARM app is first encountered. No manual switching is needed. This toggle exists for compatibility with older settings.</span>
           </div>
           <input type="checkbox" id="setCompat" class="switch" />
         </div>
@@ -468,7 +468,7 @@
         </div>
         <div class="runtime-actions">
           <button class="btn ghost sm" id="btnRuntimeStart">Start runtime</button>
-          <button class="btn ghost sm" id="btnRuntimeStop">停止内置虚拟机</button>
+          <button class="btn ghost sm" id="btnRuntimeStop">Stop built-in virtual machine</button>
           <span class="inline-note" id="probeResult"></span>
         </div>
       </div>
@@ -483,26 +483,26 @@
             <button class="btn ghost sm" id="btnAndroidRefresh">Refresh</button>
             <button class="btn ghost sm" id="btnAndroidTune">Optimize performance</button>
           </div>
-          <span class="sub">关闭系统动画、放开后台进程上限并把当前应用加入电池白名单，低配电脑体感最明显。</span>
+          <span class="sub">Disable system animations, raise the background process limit, and add the current app to the battery whitelist. Most noticeable on low-end PCs.</span>
         </div>
         <div class="field switch-field">
           <div>
             <label>Wi-Fi</label>
-            <span class="sub">安卓虚拟机内部的无线网，关掉可省一点 CPU。</span>
+            <span class="sub">Wi-Fi inside the Android VM. Turning it off can save a little CPU.</span>
           </div>
           <input type="checkbox" id="setAndroidWifi" class="switch" />
         </div>
         <div class="field switch-field">
           <div>
             <label>Airplane mode</label>
-            <span class="sub">彻底断网（含移动数据），需要安静时打开。</span>
+            <span class="sub">Completely disconnects the network, including mobile data.</span>
           </div>
           <input type="checkbox" id="setAndroidAirplane" class="switch" />
         </div>
         <div class="field switch-field">
           <div>
             <label>System animations</label>
-            <span class="sub">关掉后界面切换明显更快，功能不受影响。</span>
+            <span class="sub">Turning animations off makes transitions noticeably faster without affecting functionality.</span>
           </div>
           <input type="checkbox" id="setAndroidAnim" class="switch" />
         </div>
@@ -520,16 +520,16 @@
               <option value="0.85">小</option>
               <option value="1.00">标准</option>
               <option value="1.15">大</option>
-              <option value="1.30">特大</option>
+              <option value="1.30">Extra large</option>
             </select>
           </div>
           <div>
             <label>Display size</label>
             <select id="setAndroidDensity">
-              <option value="240">紧凑（省性能）</option>
+              <option value="240">Compact (better performance)</option>
               <option value="320">标准</option>
-              <option value="420">宽松</option>
-              <option value="480">特大</option>
+              <option value="420">Spacious</option>
+              <option value="480">Extra large</option>
             </select>
           </div>
         </div>
@@ -547,24 +547,24 @@
         <div class="field switch-field">
           <div>
             <label>Automatically create a desktop shortcut after installation</label>
-            <span class="sub">快捷方式带真实应用图标，双击直接进应用</span>
+            <span class="sub">Shortcuts use the app’s real icon. Double-click to launch.</span>
           </div>
           <input type="checkbox" id="setAutoShortcut" class="switch" />
         </div>
         <div class="field switch-field">
           <div>
             <label>Also add to the Start menu</label>
-            <span class="sub">Windows 搜索能搜到应用名，任务栏也按应用分组</span>
+            <span class="sub">Find apps by name in Windows Search; taskbar windows are grouped by app.</span>
           </div>
           <input type="checkbox" id="setStartMenuShortcut" class="switch" />
         </div>
         <div class="field">
           <label>Shortcut folder</label>
-          <input id="setShortcutDir" type="text" placeholder="留空 = 桌面" />
+          <input id="setShortcutDir" type="text" placeholder="Leave blank = Desktop" />
         </div>
         <div class="runtime-actions">
           <button class="btn ghost sm" id="btnRebuildShortcuts">Rebuild shortcuts</button>
-          <span class="inline-note">桌面图标被误删或被安全软件拦掉时，点这里按当前设置全部补齐。</span>
+          <span class="inline-note">If shortcuts were deleted or blocked by security software, click here to restore them using the current settings.</span>
         </div>
       </div>
 
@@ -579,13 +579,13 @@
             <button class="btn ghost sm" id="btnSyncShared">Sync now</button>
             <button class="btn primary sm" id="btnSaveShared">Save and move</button>
           </div>
-          <span class="sub">修改后旧目录里已有的文件会自动搬到新目录；正在运行的文件互通不受影响。</span>
+          <span class="sub">Existing files are automatically moved to the new folder. File sharing continues to work while apps are running.</span>
         </div>
         <div class="field">
           <label>Android folder</label>
           <input id="setDeviceSharedDir" type="text" placeholder="/sdcard/ApkStartShared" />
         </div>
-        <p class="note">两侧目录会持续双向同步；在安卓应用里保存到该目录的文件，会出现在本机共享目录中。</p>
+        <p class="note">The folders stay in sync both ways. Files saved here by Android apps appear in the local shared folder.</p>
       </div>
 
       <div class="group">
@@ -593,23 +593,23 @@
         <div class="field switch-field">
           <div>
             <label>Associate .apk files</label>
-            <span class="sub">双击 APK 直接安装到 ApkStart（仅写入当前用户，无需管理员）</span>
+            <span class="sub">Double-click APKs to install them in ApkStart (current user only; no administrator required)</span>
           </div>
           <button class="btn ghost sm" id="btnAssoc">检查中…</button>
         </div>
         <div class="field">
           <label>运行时数据目录（系统镜像 · 已装应用 · 快照）</label>
           <div class="row">
-            <input id="setRuntimeDir" type="text" readonly placeholder="默认：C 盘用户数据目录" />
+            <input id="setRuntimeDir" type="text" readonly placeholder="Default: user data folder on drive C:" />
             <button class="btn ghost sm" id="btnBrowseRuntimeDir">Browse</button>
             <button class="btn ghost sm" id="btnOpenData">Open</button>
           </div>
-          <span class="sub">这里占用空间最大（数 GB）。改到非系统盘可大幅减轻 C 盘压力；修改后需重启软件，已存在的数据不会自动搬移（请手动复制后删除旧目录）。</span>
+          <span class="sub">This folder uses the most disk space (several GB). Moving it to another drive reduces pressure on C:. Restart the app after changing it. Existing data is not moved automatically (copy it manually, then delete the old folder).</span>
         </div>
         <div class="field">
           <label>安卓数据目录（应用、游戏与快速启动快照）</label>
           <div class="row">
-            <input id="setAvdDir" type="text" readonly placeholder="默认：运行时目录下的 avd 文件夹" />
+            <input id="setAvdDir" type="text" readonly placeholder="Default: avd folder inside the runtime directory" />
             <button class="btn ghost sm" id="btnBrowseAvdDir">Browse</button>
             <button class="btn ghost sm" id="btnOpenAvdDir">Open</button>
           </div>
@@ -620,7 +620,7 @@
           <label>卸载 ApkStart</label>
           <div class="row">
             <button class="btn ghost sm" id="btnUninstall">一键卸载</button>
-            <span class="inline-note">卸载会取消 .apk 关联并移除程序；便携版请按提示手动删除目录。</span>
+            <span class="inline-note">Uninstalling removes the .apk association and the app. For the portable version, follow the prompt to delete the folder manually.</span>
           </div>
         </div>
       </div>
@@ -651,19 +651,19 @@
           <div class="about-qrs">
             <div class="about-qr">
               <img src="assets/wechat-qr.jpg" alt="微信公众号二维码" width="112" height="112" />
-              <span class="about-qr-tip">扫码关注公众号</span>
+              <span class="about-qr-tip">Scan to follow on WeChat</span>
             </div>
             <div class="about-qr">
               <img src="assets/douyin-qr.jpg" alt="抖音二维码" width="112" height="112" />
-              <span class="about-qr-tip">抖音 · 日常MIKU</span>
+              <span class="about-qr-tip">Douyin · Daily MIKU</span>
             </div>
           </div>
           <div class="about-info">
             <div class="about-name">ApkStart <span class="about-ver" id="aboutVer"></span></div>
-            <p class="note">双击即装的 Windows 安卓应用启动器：APK 安装、桌面快捷方式、独立窗口运行、文件双向互通。</p>
+            <p class="note">A Windows Android app launcher: install APKs, create desktop shortcuts, run apps in separate windows, and sync files both ways.</p>
             <div class="about-links">
               <a href="https://github.com/RoutineMiku/apkstart" target="_blank" rel="noopener">GitHub · RoutineMiku/apkstart</a>
-              <a href="https://v.douyin.com/9TIIxVCANig/" target="_blank" rel="noopener">抖音 · @日常MIKU（联系作者）</a>
+              <a href="https://v.douyin.com/9TIIxVCANig/" target="_blank" rel="noopener">Douyin · @DailyMIKU (contact the author)</a>
               <span class="powered">Powered by <b>RoutineMiku</b></span>
             </div>
           </div>
@@ -672,7 +672,7 @@
     </div>
     <footer class="modal-foot">
       <span class="inline-note">Settings take effect immediately</span>
-      <button class="btn primary" id="btnDoneSettings">完成</button>
+      <button class="btn primary" id="btnDoneSettings">Done</button>
     </footer>
   </div>
 </div>

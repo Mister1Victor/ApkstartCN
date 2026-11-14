@@ -35,7 +35,7 @@ function fmtSize(bytes) {
 function relTime(ts) {
   if (!ts) return '';
   const d = Date.now() - ts;
-  if (d < 60000) return '刚刚';
+  if (d < 60000) return 'just now';
   if (d < 3600000) return `${Math.floor(d / 60000)} 分钟前`;
   if (d < 86400000) return `${Math.floor(d / 3600000)} 小时前`;
   if (d < 86400000 * 30) return `${Math.floor(d / 86400000)} 天前`;
@@ -150,7 +150,7 @@ function renderGrid() {
           : `<div class="fallback" style="background:${esc(a.accent || '#9aa6b2')}">${esc(initialOf(a.label))}</div>`}
       </div>
       <div class="name">${esc(a.label)}</div>
-      <div class="meta">${a.running ? '运行中' : `v${esc(a.versionName)}${a.lastLaunchAt ? ' · ' + relTime(a.lastLaunchAt) : ''}`}</div>
+      <div class="meta">${a.running ? 'Running' : `v${esc(a.versionName)}${a.lastLaunchAt ? ' · ' + relTime(a.lastLaunchAt) : ''}`}</div>
       <div class="open-hint">${a.running ? 'Switch to foreground' : 'Open'}</div>
     </div>
   `).join('');
@@ -188,7 +188,7 @@ async function refreshStatus() {
       tag.className = 'brand-tag';
     } else if (s.deviceOnline) {
       dot.className = 'dot ok';
-      text.textContent = `运行时已就绪 · Android ${s.android || '?'}${s.freeform ? ' · separate app windows enabled' : ''}`;
+      text.textContent = `Runtime ready · Android ${s.android || '?'}${s.freeform ? ' · separate app windows enabled' : ''}`;
       tag.textContent = `Android ${s.android || ''}`.trim();
       tag.className = 'brand-tag ok';
     } else if (s.phase === 'booting' || s.vmStarting) {
@@ -683,7 +683,7 @@ function bindAndroid() {
   $('btnAndroidRefresh').addEventListener('click', () => refreshAndroid());
   $('btnAndroidTune').addEventListener('click', async () => {
     const r = await api.android.tune(state.launchPkg || '').catch(() => null);
-    toast({ type: r && r.ok ? 'ok' : 'error', title: r && r.ok ? 'Optimized: animations off, background limits relaxed, battery whitelist enabled' : '优化失败，运行时可能未启动' });
+    toast({ type: r && r.ok ? 'ok' : 'error', title: r && r.ok ? 'Optimized: animations off, background limits relaxed, battery whitelist enabled' : 'Optimization failed; the runtime may not be running' });
     if (r && r.ok) refreshAndroid();
   });
   const open = async (action) => {
@@ -750,7 +750,7 @@ async function refreshDataInfo() {
   const img = info.imageGB ? `${info.imageGB} GB` : 'Not created';
   const free = info.freeDiskMB ? `${(info.freeDiskMB / 1024).toFixed(1)} GB` : 'Unknown';
   el.textContent = `当前数据分区镜像：${img}${auto ? '(Auto)' : ''} · 所在磁盘剩余 ${free}。`
-    + '游戏提示「存储空间不足」就把这里调大后点「立即扩容」——扩容是就地做的，已装应用与存档都保留。';
+    + 'If a game reports “Insufficient storage”, increase this value and click “Expand now”. Expansion is in place; installed apps and saves are preserved.';
 }
 
 async function openSettings() {
@@ -768,12 +768,12 @@ async function openSettings() {
   if (curVerEl && info.version) curVerEl.textContent = `v${info.version}`;
   const assoc = await api.assocStatus();
   const btn = $('btnAssoc');
-  btn.textContent = assoc.registered ? '已关联 · 点击取消' : '未关联 · 点击开启';
+  btn.textContent = assoc.registered ? 'Associated · click to remove' : 'Not associated · click to enable';
   btn.dataset.on = assoc.registered ? '1' : '0';
 
   api.doctorProfile().then((r) => {
     if (r && r.text) $('autoProfileText').textContent = r.text;
-  }).catch(() => { $('autoProfileText').textContent = '自动模式'; });
+  }).catch(() => { $('autoProfileText').textContent = 'Automatic mode'; });
   api.runtimeUsage().then((u) => {
     $('usageText').textContent = u
       ? `共 ${u.totalText}${u.reclaimable ? ` · 可回收 ${u.reclaimableText}（${u.count} 项）` : ' · 已是精简状态'}`
@@ -1381,10 +1381,10 @@ function bindSettings() {
 
   $('btnProbe').addEventListener('click', async () => {
     const el = $('probeResult');
-    el.textContent = '探测中…';
+    el.textContent = 'Checking…';
     const found = await api.runtimeProbe();
     if (!found.length) {
-      el.textContent = '未发现已运行的运行时';
+      el.textContent = 'No running runtime found';
       return;
     }
     el.textContent = `发现：${found.map((f) => f.name).join(' and ')}`;
@@ -1395,7 +1395,7 @@ function bindSettings() {
 
   $('btnRuntimeStart').addEventListener('click', async () => {
     const el = $('probeResult');
-    el.textContent = '正在启动…';
+    el.textContent = 'Starting…';
     const r = await api.runtimeStart();
     el.textContent = r.ok ? `已就绪：${r.engine}` : `启动失败：${r.error}`;
     refreshStatus();
@@ -1403,7 +1403,7 @@ function bindSettings() {
 
   $('btnRuntimeStop').addEventListener('click', async () => {
     await api.runtimeStop();
-    $('probeResult').textContent = '已停止内置虚拟机';
+    $('probeResult').textContent = 'Built-in virtual machine stopped';
     refreshStatus();
   });
 
@@ -1411,12 +1411,12 @@ function bindSettings() {
     const btn = $('btnAssoc');
     if (btn.dataset.on === '1') {
       await api.assocUnregister();
-      btn.textContent = '未关联 · 点击开启';
+      btn.textContent = 'Not associated · click to enable';
       btn.dataset.on = '0';
       toast({ title: '.apk 关联已取消' });
     } else {
       const r = await api.assocRegister();
-      btn.textContent = '已关联 · 点击取消';
+      btn.textContent = 'Associated · click to remove';
       btn.dataset.on = '1';
       toast({ title: '.apk 关联已开启', body: r.ok ? '现在双击 APK 会直接安装到 ApkStart' : '', type: r.ok ? 'ok' : 'error' });
     }
@@ -1471,24 +1471,24 @@ function bindEvents() {
     if (act === 'emulator' || act === 'sysimg' || act === 'accel'
       || act === 'adb' || act === 'qemu' || act === 'iso' || act === 'disk') {
       const r = await runStep(act);
-      if (!r.ok) toast({ title: '操作失败', body: r.error, type: 'error', sticky: true });
+      if (!r.ok) toast({ title: 'Operation failed', body: r.error, type: 'error', sticky: true });
       return;
     }
     if (act === 'isoImport') {
       const r = await api.importIso();
-      if (r.ok) { toast({ title: '系统镜像已导入', body: r.path, type: 'ok' }); refreshStatus(); }
-      else if (!r.canceled) toast({ title: '导入失败', body: r.error, type: 'error' });
+      if (r.ok) { toast({ title: 'System image imported', body: r.path, type: 'ok' }); refreshStatus(); }
+      else if (!r.canceled) toast({ title: 'Import failed', body: r.error, type: 'error' });
       return;
     }
     if (act === 'diskImport') {
       const r = await api.importDisk();
-      if (r.ok) { toast({ title: '虚拟磁盘已导入', body: '可直接启动运行时', type: 'ok' }); refreshStatus(); }
-      else if (!r.canceled) toast({ title: '导入失败', body: r.error, type: 'error' });
+      if (r.ok) { toast({ title: 'Virtual disk imported', body: 'The runtime can now be started directly', type: 'ok' }); refreshStatus(); }
+      else if (!r.canceled) toast({ title: 'Import failed', body: r.error, type: 'error' });
       return;
     }
     if (act === 'install') { await startInstall(); return; }
     if (act === 'vmStart') {
-      const t = toast({ title: '正在启动运行时…', body: '首次启动需要引导 Android 系统', sticky: true, spinner: true });
+      const t = toast({ title: 'Starting runtime…', body: 'The Android system must be initialized on first launch', sticky: true, spinner: true });
       const r = await api.runtimeStart();
       if (r.ok) { t.update({ title: 'Runtime ready', type: 'ok' }); setTimeout(t.dismiss, 2200); }
       else t.update({ title: 'Launch failed', body: r.error, type: 'error' });
@@ -1497,7 +1497,7 @@ function bindEvents() {
     }
     if (act === 'vmStop') {
       await api.runtimeStop();
-      toast({ title: '运行时会话已结束' });
+      toast({ title: 'Runtime session ended' });
       refreshStatus();
     }
   });
@@ -1514,9 +1514,9 @@ function bindEvents() {
     btnSync.disabled = true;
     try {
       await api.syncShared();
-      toast({ title: '已同步共享目录', type: 'ok' });
+      toast({ title: 'Shared folder synced', type: 'ok' });
     } catch (_) {
-      toast({ title: '同步失败', body: '运行时未就绪时会跳过同步', type: 'error' });
+      toast({ title: 'Sync failed', body: 'Sync is skipped when the runtime is not ready', type: 'error' });
     } finally {
       btnSync.disabled = false;
     }
@@ -1586,7 +1586,7 @@ function bindEvents() {
       .map((f) => { try { return api.pathForFile(f); } catch (_) { return null; } })
       .filter((p) => p && /\.apk$/i.test(p));
     if (paths.length) installFiles(paths);
-    else toast({ title: '只能拖入 .apk 文件', type: 'error' });
+    else toast({ title: 'Only .apk files can be dropped here', type: 'error' });
   });
 
   // 主进程事件
@@ -1642,11 +1642,11 @@ async function init() {
 let startupInfo = null;
 
 function greetingOf(h) {
-  if (h < 5) return '夜深了';
-  if (h < 11) return '早上好';
-  if (h < 13) return '中午好';
-  if (h < 18) return '下午好';
-  return '晚上好';
+  if (h < 5) return 'It's late';
+  if (h < 11) return 'Good morning';
+  if (h < 13) return 'Hello';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
 function bindWelcome() {

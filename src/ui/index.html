@@ -285,7 +285,7 @@
           <div>
             <label>Graphics quality (Android rendering resolution)</label>
             <select id="setRenderSize">
-              <option value="auto">自动（按加速状态）</option>
+              <option value="auto">Auto (based on acceleration)</option>
               <option value="540x960">Performance · 540 × 960</option>
               <option value="720x1280">Balanced · 720 × 1280</option>
               <option value="1080x1920">High definition · 1080 × 1920</option>
@@ -294,7 +294,7 @@
           <div>
             <label>Android data partition (apps and games are stored here)</label>
             <select id="setDataGB">
-              <option value="0">自动</option>
+              <option value="0">Auto</option>
               <option value="4">4 GB</option>
               <option value="6">6 GB</option>
               <option value="8">8 GB</option>
@@ -311,7 +311,7 @@
           </div>
         </div>
         <div class="field">
-          <span class="sub" id="dataNote">正在读取数据分区…</span>
+          <span class="sub" id="dataNote">Reading data partition…</span>
         </div>
         <div class="field switch-field">
           <div>
@@ -402,7 +402,7 @@
         <details class="mini-details">
           <summary>Gitee update source (optional)</summary>
           <div class="field">
-            <label>Gitee 只读 token（一般不用填）</label>
+            <label>Gitee read-only token (usually not needed)</label>
             <input id="setGiteeToken" type="password" placeholder="Leave blank: public repositories can be read anonymously" />
             <span class="sub">本项目仓库已公开，Gitee 的发行版列表匿名就能读，留空也能用 Gitee 源。
               只有在「Gitee 被限流（返回 403/429）」或你想读私有分支时才需要填：
@@ -454,7 +454,7 @@
         </div>
         <div class="field switch-field">
           <div>
-            <label>通用兼容镜像（自动管理）</label>
+            <label>Universal compatibility image (managed automatically)</label>
             <span class="sub">A single universal Android 14 image supports both x86 and ARM apps. It downloads automatically when an ARM app is first encountered. No manual switching is needed. This toggle exists for compatibility with older settings.</span>
           </div>
           <input type="checkbox" id="setCompat" class="switch" />
@@ -462,7 +462,7 @@
         <div class="field" id="compatInstallField" hidden>
           <label>Compatibility image</label>
           <div class="row">
-            <span class="inline-note" id="compatImgStatus">未下载</span>
+            <span class="inline-note" id="compatImgStatus">Not downloaded</span>
             <button class="btn ghost sm" id="btnInstallPlay">Download compatibility image</button>
           </div>
         </div>
@@ -517,9 +517,9 @@
           <div>
             <label>Font size</label>
             <select id="setAndroidFont">
-              <option value="0.85">小</option>
-              <option value="1.00">标准</option>
-              <option value="1.15">大</option>
+              <option value="0.85">Small</option>
+              <option value="1.00">Standard</option>
+              <option value="1.15">Large</option>
               <option value="1.30">Extra large</option>
             </select>
           </div>
@@ -527,7 +527,7 @@
             <label>Display size</label>
             <select id="setAndroidDensity">
               <option value="240">Compact (better performance)</option>
-              <option value="320">标准</option>
+              <option value="320">Standard</option>
               <option value="420">Spacious</option>
               <option value="480">Extra large</option>
             </select>
@@ -595,10 +595,10 @@
             <label>Associate .apk files</label>
             <span class="sub">Double-click APKs to install them in ApkStart (current user only; no administrator required)</span>
           </div>
-          <button class="btn ghost sm" id="btnAssoc">检查中…</button>
+          <button class="btn ghost sm" id="btnAssoc">Checking…</button>
         </div>
         <div class="field">
-          <label>运行时数据目录（系统镜像 · 已装应用 · 快照）</label>
+          <label>Runtime data folder (system image · installed apps · snapshots)</label>
           <div class="row">
             <input id="setRuntimeDir" type="text" readonly placeholder="Default: user data folder on drive C:" />
             <button class="btn ghost sm" id="btnBrowseRuntimeDir">Browse</button>
@@ -607,7 +607,7 @@
           <span class="sub">This folder uses the most disk space (several GB). Moving it to another drive reduces pressure on C:. Restart the app after changing it. Existing data is not moved automatically (copy it manually, then delete the old folder).</span>
         </div>
         <div class="field">
-          <label>安卓数据目录（应用、游戏与快速启动快照）</label>
+          <label>Android data folder (apps, games, and quick-boot snapshots)</label>
           <div class="row">
             <input id="setAvdDir" type="text" readonly placeholder="Default: avd folder inside the runtime directory" />
             <button class="btn ghost sm" id="btnBrowseAvdDir">Browse</button>
@@ -617,9 +617,9 @@
             磁盘紧张时把它指到另一个盘（如 D:），重启软件后生效；旧目录里的 <code>apkstart.avd</code> 可整体搬过去再删。</span>
         </div>
         <div class="field">
-          <label>卸载 ApkStart</label>
+          <label>Uninstall ApkStart</label>
           <div class="row">
-            <button class="btn ghost sm" id="btnUninstall">一键卸载</button>
+            <button class="btn ghost sm" id="btnUninstall">Uninstall</button>
             <span class="inline-note">Uninstalling removes the .apk association and the app. For the portable version, follow the prompt to delete the folder manually.</span>
           </div>
         </div>
@@ -650,11 +650,11 @@
           </div>
           <div class="about-qrs">
             <div class="about-qr">
-              <img src="assets/wechat-qr.jpg" alt="微信公众号二维码" width="112" height="112" />
+              <img src="assets/wechat-qr.jpg" alt="WeChat official account QR code" width="112" height="112" />
               <span class="about-qr-tip">Scan to follow on WeChat</span>
             </div>
             <div class="about-qr">
-              <img src="assets/douyin-qr.jpg" alt="抖音二维码" width="112" height="112" />
+              <img src="assets/douyin-qr.jpg" alt="Douyin QR code" width="112" height="112" />
               <span class="about-qr-tip">Douyin · Daily MIKU</span>
             </div>
           </div>

@@ -492,6 +492,14 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
     assert(/SetWindowRgn\(emu, IntPtr\.Zero/.test(src), 'embed 时要清掉旧版本残留的 region');
   });
 
+  await test('宿主可见时恢复隐藏的 Chromium 渲染层', () => {
+    const file = path.join(__dirname, '..', 'src', 'core', 'win', 'agent.ps1');
+    const source = fs.readFileSync(file, 'utf8');
+    assert(/IsWindowVisible\(_host\)\s*&&\s*!IsIconic\(_host\)\s*&&\s*!IsWindowVisible\(ep\)/.test(source),
+      '只在宿主可见且未最小化时恢复隐藏的渲染层');
+    assert(/ShowWindowAsync\(ep, SW_SHOWNOACTIVATE\)/.test(source), '恢复渲染层时不抢焦点');
+  });
+
   // 旋转必须换「物理面板尺寸」并重启，不能只改运行时 wm size / density。
   //   - wm size：物理 LCD 仍是竖的 -> 画面躺倒 90°、只占左上角一条、点击坐标错位；
   //   - wm density：framebuffer 尺寸不变 -> 画面不铺满，最大化后右侧一大片空白。

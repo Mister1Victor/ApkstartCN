@@ -12,6 +12,15 @@ const { URL } = require('url');
 
 const UA = 'ApkStart/0.2 (Windows; +https://github.com/apkstart)';
 
+function validRange(res, start, end, total) {
+  const m = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(String(res.headers['content-range'] || ''));
+  if (!m) return false;
+  const [a, b, size] = m.slice(1).map(Number);
+  const length = res.headers['content-length'];
+  return Number.isSafeInteger(size) && a === start && b === end && size === total &&
+    (length == null || Number(length) === end - start + 1);
+}
+
 function openStream(url, { method = 'GET', headers = {}, redirects = 0 } = {}) {
   return new Promise((resolve, reject) => {
     if (redirects > 6) return reject(new Error('重定向次数过多'));
@@ -97,14 +106,25 @@ async function download(url, dest, opt = {}) {
 
     if (res.statusCode === 416) {
       res.resume();
-      // 已下载完整
-      break;
+      if (existing > 0 && attempt <= retries + 1) {
+        discardPartial(dest);
+        continue;
+      }
+      throw new Error('无法验证续传文件，服务器返回 HTTP 416');
     }
     if (res.statusCode !== 200 && res.statusCode !== 206) {
       res.resume();
       if (attempt <= retries) { await new Promise((r) => setTimeout(r, 1500)); continue; }
       discardPartial(dest);   // 重试耗尽：别把坏文件留给下次续传
       throw new Error(`下载失败 HTTP ${res.statusCode}: ${url}`);
+    }
+
+    if (res.statusCode === 206) {
+      const m = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(String(res.headers['content-range'] || ''));
+      if (!m || !validRange(res, existing, Number(m[2]), Number(m[3])) || Number(m[2]) !== Number(m[3]) - 1) {
+        res.resume();
+        throw new Error('服务器返回了不匹配的续传范围');
+      }
     }
 
     const total = res.statusCode === 206
@@ -276,6 +296,10 @@ async function downloadParallel(url, dest, opt = {}) {
       res.resume();
       throw new Error(`分块请求被拒绝 HTTP ${res.statusCode}`);
     }
+    if (!validRange(res, c.pos, c.end, total)) {
+      res.resume();
+      throw new Error('服务器返回了不匹配的分块范围');
+    }
     await new Promise((resolve, reject) => {
       // 必须自己兜住「promise 永远不 settle」：res.destroy(err) 在某些情况下只发
       // close 不发 error，没有这个 guard 的话一整块会挂死，整个下载停在那里不动。
@@ -292,6 +316,10 @@ async function downloadParallel(url, dest, opt = {}) {
         idle = setTimeout(() => { res.destroy(); finish(new Error('连接停滞（长时间无数据）')); }, idleMs);
       };
       res.on('data', (buf) => {
+        if (buf.length > c.end - c.pos + 1) {
+          res.destroy();
+          return finish(new Error('分块响应超出请求范围'));
+        }
         try {
           fs.writeSync(fd, buf, 0, buf.length, c.pos);
         } catch (e) {
@@ -490,6 +518,10 @@ async function downloadMulti(urls, dest, opt = {}) {
       res.resume();
       throw new Error(`分块被拒绝 HTTP ${res.statusCode}`);
     }
+    if (!validRange(res, c.pos, c.end, total)) {
+      res.resume();
+      throw new Error('服务器返回了不匹配的分块范围');
+    }
     const startPos = c.pos;
     const startedAt = Date.now();
     // 同一条连接 destroy 之后仍可能再收到已缓冲的包，会重复触发换源、把源跳过头，
@@ -513,6 +545,10 @@ async function downloadMulti(urls, dest, opt = {}) {
         idle = setTimeout(() => { res.destroy(); finish(new Error('连接停滞（无数据超时）')); }, idleMs);
       };
       res.on('data', (buf) => {
+        if (buf.length > c.end - c.pos + 1) {
+          res.destroy();
+          return finish(new Error('分块响应超出请求范围'));
+        }
         try {
           fs.writeSync(fd, buf, 0, buf.length, c.pos);
         } catch (e) {

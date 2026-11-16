@@ -42,7 +42,7 @@ fs.rmSync(path.join(OUT, 'resources', 'default_app.asar'), { force: true });
 
 // 1.1 语言包瘦身：Electron 自带 55 种语言，合计 41MB，我们只用中文界面。
 //     只留 zh-CN / zh-TW / en-US，其余删掉（-39MB，等于整包小 15%）。
-const KEEP_LOCALES = new Set(['zh-CN.pak', 'zh-TW.pak', 'en-US.pak']);
+const KEEP_LOCALES = new Set(['zh-CN.pak', 'zh-TW.pak', 'en-US.pak', 'pt-BR.pak']);
 let localeSaved = 0;
 try {
   const locDir = path.join(OUT, 'locales');
@@ -79,6 +79,13 @@ const appDir = path.join(OUT, 'resources', 'app');
 for (const item of ['package.json', 'src', 'LICENSE']) {
   const src = path.join(ROOT, item);
   if (fs.existsSync(src)) copy(src, path.join(appDir, item));
+}
+
+// Runtime image extraction uses the native LZMA package and its platform binding.
+for (const item of ['lzma', 'lzma-win32-x64-msvc']) {
+  const src = path.join(ROOT, 'node_modules', '@napi-rs', item);
+  if (!fs.existsSync(src)) throw new Error(`Missing required dependency: @napi-rs/${item}`);
+  copy(src, path.join(appDir, 'node_modules', '@napi-rs', item));
 }
 
 // 3. 可选目录

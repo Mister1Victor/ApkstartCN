@@ -85,6 +85,7 @@ test('resolveInitialLanguage: upgrading user without a saved language keeps Chin
 
 test('resolveInitialLanguage: new user follows the first supported OS language', () => {
   eq(i18n.resolveInitialLanguage({ systemLocales: ['vi-VN', 'en-US'] }).lang, 'vi');
+  eq(i18n.resolveInitialLanguage({ systemLocales: ['es-PY', 'en-US'] }).lang, 'es');
   eq(i18n.resolveInitialLanguage({ systemLocales: ['zh-Hans-CN'] }).lang, 'zh');
   eq(i18n.resolveInitialLanguage({ systemLocales: ['zh-TW'] }).lang, 'zh');
   eq(i18n.resolveInitialLanguage({ systemLocales: ['fr-FR', 'en-GB'] }).lang, 'en');
@@ -192,8 +193,8 @@ test('tHtml escapes interpolated values but keeps the dictionary markup', () => 
 
 console.log('\n[i18n] dictionaries');
 
-test('en ⇔ vi: same keys, same placeholders, same HTML tags, no empty values', () => {
-  const problems = checker.checkDicts({ en: i18n.DICTS.en, vi: i18n.DICTS.vi });
+test('en ⇔ vi ⇔ es: same keys, same placeholders, same HTML tags, no empty values', () => {
+  const problems = checker.checkDicts({ en: i18n.DICTS.en, vi: i18n.DICTS.vi, es: i18n.DICTS.es });
   assert(!problems.length, `${problems.length} problem(s):\n      ${problems.slice(0, 10).join('\n      ')}`);
 });
 
@@ -206,7 +207,7 @@ test('every t() / tHtml() key and static HTML text in src/ has a translation', (
     else if (f.endsWith('.html')) checker.htmlKeys(f, keys);
   }
   assert(keys.size > 500, `expected the full key set, got ${keys.size}`);
-  for (const l of ['en', 'vi']) {
+  for (const l of ['en', 'vi', 'es']) {
     const miss = [...keys.entries()].filter(([k]) => !(k in i18n.DICTS[l]));
     assert(!miss.length, `[${l}] ${miss.length} missing, e.g. ${miss.slice(0, 3).map(([k, w]) => `${w} ${k.slice(0, 40)}`).join(' | ')}`);
   }

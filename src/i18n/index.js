@@ -1,6 +1,6 @@
 'use strict';
 /**
- * i18n: interface language (English / Tiếng Việt / 中文).
+ * i18n: interface language (English / Español / Tiếng Việt / 中文).
  *
  * The UI was originally written in Chinese, so the Chinese source text itself is the
  * translation key (gettext style): `t('安装完成')` returns the English / Vietnamese text
@@ -26,17 +26,19 @@
 
 const LANGUAGES = [
   { code: 'en', name: 'English', tag: 'en-US' },
+  { code: 'es', name: 'Español', tag: 'es-ES' },
   { code: 'vi', name: 'Tiếng Việt', tag: 'vi-VN' },
   { code: 'zh', name: '中文', tag: 'zh-CN' },
 ];
 const DEFAULT_LANG = 'en';
 const SUPPORTED = LANGUAGES.map((l) => l.code);
 /** Order in which dictionaries are tried for a missing key (the Chinese source text is last). */
-const FALLBACK = { vi: ['vi', 'en'], en: ['en'], zh: [] };
+const FALLBACK = { es: ['es', 'en'], vi: ['vi', 'en'], en: ['en'], zh: [] };
 
 const DICTS = {
   en: require('./en.json'),
   vi: require('./vi.json'),
+  es: require('./es.json'),
 };
 
 let current = null;
@@ -44,6 +46,7 @@ let current = null;
 /** Supported code for a locale tag (`vi-VN` → `vi`), or null when unsupported. */
 function match(lang) {
   const l = String(lang || '').toLowerCase();
+  if (l.startsWith('es')) return 'es';
   if (l.startsWith('vi')) return 'vi';
   if (l.startsWith('zh')) return 'zh';
   if (l.startsWith('en')) return 'en';

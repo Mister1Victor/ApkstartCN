@@ -175,7 +175,7 @@ function main() {
   }
   let missing = 0;
   const dicts = {};
-  for (const lang of ['en', 'vi']) {
+  for (const lang of ['en', 'vi', 'es']) {
     const dict = JSON.parse(fs.readFileSync(path.join(SRC, 'i18n', `${lang}.json`), 'utf8'));
     dicts[lang] = dict;
     const miss = [...keys.entries()].filter(([k]) => !(k in dict));

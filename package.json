@@ -35,7 +35,10 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test": "node test/run-tests.js && node test/engine-test.js && node test/auto-test.js",
+    "test": "node test/run-tests.js && node test/engine-test.js && node test/auto-test.js && node test/i18n-test.js",
+    "check:i18n": "node tools/check-i18n.js",
+    "test:ui-i18n": "node test/ui-i18n-layout-all.js",
+    "test:i18n-smoke": "node test/i18n-app-smoke.js",
     "pack": "node build/pack.js",
     "runtime": "node build/prepare-runtime.js",
     "build:exe": "node build/prepare-runtime.js && electron-builder --win nsis --config electron-builder.yml",

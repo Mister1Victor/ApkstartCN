@@ -32,8 +32,14 @@ const ICON_DIR = path.join(DATA_DIR, 'icons');
 const APK_DIR = path.join(DATA_DIR, 'apks');
 const APPS_FILE = path.join(DATA_DIR, 'apps.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+// 本进程启动时数据目录里是否已有旧版本留下的配置/应用清单（= 升级用户，而非全新安装）。
+// 必须在任何写入之前取值，所以放在模块加载时。
+const EXISTING_USER = fs.existsSync(SETTINGS_FILE) || fs.existsSync(APPS_FILE);
 
 const DEFAULT_SETTINGS = {
+  // 界面语言：en | vi | zh。空 = 尚未选择，启动时由 i18n.resolveInitialLanguage 决定并写回：
+  // 老用户升级保持中文，新用户跟随系统语言（不支持的语言回落英文）。
+  language: '',
   adbPath: '',
   device: '127.0.0.1:5555',
   engine: {
@@ -238,6 +244,7 @@ function resourcePreset(mode) {
 
 const store = {
   DATA_DIR, ICON_DIR, APK_DIR,
+  existingUser: EXISTING_USER,
   // 商店（MSIX）打包版标记：main.js 据此关掉自更新、跳过需要管理员权限的内核驱动安装
   STORE_BUILD,
 

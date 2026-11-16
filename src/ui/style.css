@@ -89,6 +89,13 @@ body {
 }
 .icon-btn:hover { background: #edf0f3; color: var(--text); }
 
+/* 标题栏语言按钮：地球图标 + 当前语言代码 */
+.icon-btn.lang-btn { width: auto; padding: 0 8px; display: flex; align-items: center; gap: 5px; }
+.lang-btn .lang-code { font-size: 11.5px; font-weight: 600; letter-spacing: .02em; }
+.lang-menu { min-width: 170px; }
+.lang-menu .item .check { margin-left: auto; color: var(--brand-dark, #0a6f47); font-weight: 700; }
+.lang-menu .item.cur { font-weight: 600; }
+
 /* ---------------- 布局 ---------------- */
 
 .shell {
@@ -435,7 +442,9 @@ body {
 }
 .field input:focus, .field select:focus { border-color: #b9c6d4; box-shadow: 0 0 0 3px rgba(22,163,74,.08); }
 .field input[readonly] { color: var(--muted); }
-.field .row { display: flex; gap: 8px; }
+/* 按钮多、译文长（英文 / 越南文）时整行换行，而不是把设置面板撑出横向滚动条 */
+.field .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.field .row .inline-note { flex: 1 1 auto; min-width: 0; }
 .checkbox-inline { display: inline-flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 12px; color: var(--faint); }
 .field .row input { flex: 1; }
 .field.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -475,7 +484,8 @@ body {
   border-radius: 9px;
   padding: 8px 10px;
 }
-.runtime-actions { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.runtime-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.runtime-actions .inline-note { flex: 1 1 200px; min-width: 0; }
 .inline-note { font-size: 11.5px; color: var(--faint); }
 
 /* 状态条上的自检计数：主界面不再放大横幅，问题只在底部提示，点开进设置 */
@@ -831,5 +841,6 @@ kbd {
 }
 .mini-details[open] > summary::before { transform: rotate(90deg); }
 
-/* 行内按钮不要折行（空间紧张时「立即扩容」会被拆成两行） */
-.row .btn { white-space: nowrap; flex: 0 0 auto; }
+/* 按钮文字一律不折行（英文 / 越南文译文更长，折行会溢出 28px 高的按钮）；由外层容器负责换行 */
+.btn { white-space: nowrap; }
+.row .btn { flex: 0 0 auto; }

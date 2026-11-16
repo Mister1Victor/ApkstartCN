@@ -2,6 +2,7 @@
 /* 应用窗口标题栏：只有 旋转 / 最小化 / 最大化 / 关闭，其余设置都在 ApkStart 主界面 */
 const api = window.apkstart;
 const $ = (id) => document.getElementById(id);
+const t = (k, p) => window.I18n.t(k, p);
 
 const btn = {
   rotate: $('btnRotate'),
@@ -29,7 +30,7 @@ window.addEventListener('keydown', (e) => {
 
 function applyState(s) {
   if (!s) return;
-  $('appName').textContent = s.label || '应用';
+  $('appName').textContent = s.label || t('shell.appFallback');
   $('bootName').textContent = s.label || '';
   const icon = s.iconUrl || '';
   if (icon) {
@@ -47,5 +48,10 @@ function applyState(s) {
   }
 }
 
-api.shell.onState(applyState);
-api.shell.state().then(applyState).catch(() => {});
+// Load the dictionary first so static titles / the boot tip render in the
+// right language, then apply whatever state the main process already has.
+// s.tip arrives from the main process already localized — display as-is.
+window.I18n.init(api).catch(() => {}).finally(() => {
+  api.shell.onState(applyState);
+  api.shell.state().then(applyState).catch(() => {});
+});

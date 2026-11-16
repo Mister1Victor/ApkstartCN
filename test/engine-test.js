@@ -338,10 +338,90 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
   await test('未安装系统时 ensure 返回 needsSetup', async () => {
     store.saveSettings({ runtime: { installed: false }, engine: { mode: 'builtin' } });
     const rt = new Runtime(TMP);
-    // 用假 adb 保证 isOnline 快速失败
+    // 隔离开发机正在运行的真实模拟器。
+    rt.adoptExisting = async () => null;
     const r = await rt.ensure({ onLog: () => {} });
     assert(r.ok === false, '不应就绪');
     assert(['provision', 'install'].includes(r.needsSetup), `needsSetup=${r.needsSetup}`);
+  });
+
+  await test('默认端口在线的外部 AVD 不会被当成内置运行时', async () => {
+    const rt = new Runtime(TMP);
+    rt.client = () => ({
+      isOnline: async () => true,
+      devices: async () => [{ serial: 'emulator-5554', state: 'device' }],
+    });
+    rt.prepare = async () => { throw new Error('不应修改外部 AVD'); };
+    rt.emulator.managedEmulator = async () => null;
+    rt.provisioner.materializeImages = async () => {};
+    rt.provisioner.checkEnv = async () => ({ emulator: { ok: true }, sysimg: { ok: true } });
+    rt.killOrphanEmulators = async () => 0;
+    const builtin = { serial: 'emulator-5556' };
+    rt.boot = async () => ({ ok: true, client: builtin });
+
+    const result = await rt.ensure();
+    assert(result.client === builtin, '默认端口被占用时应该启动内置 AVD');
+  });
+
+  await test('忽略外部 AVD 和无窗口内置 AVD，只接管带窗口的内置实例', async () => {
+    const rt = new Runtime(TMP);
+    const avdHome = path.join(TMP, 'adoption');
+    const lock = path.join(avdHome, 'apkstart.avd', 'hardware-qemu.ini.lock');
+    fs.mkdirSync(lock, { recursive: true });
+    rt.emulator.provisioner.paths = () => ({ avdHome });
+    const emulatorDir = path.join(TMP, '模拟器');
+    rt.emulator.locate = () => ({ emulatorExe: path.join(emulatorDir, 'emulator.exe') });
+    const proc = (avd, port, headless = false) => {
+      const name = headless ? 'qemu-system-x86_64-headless.exe' : 'qemu-system-x86_64.exe';
+      return {
+        ExecutablePath: path.join(emulatorDir, 'qemu', 'windows-x86_64', name),
+        CommandLine: name + ' -avd "' + avd + '" -port ' + port + (headless ? ' -no-window' : ''),
+      };
+    };
+    const processes = {
+      101: proc('apkstart-test', 5554, true),
+      102: proc('apkstart', 5556, true),
+      103: proc('apkstart', 5558),
+    };
+    rt.emulator.emulatorProcess = async (pid) => processes[pid];
+    const pidFile = path.join(lock, 'pid');
+    rt.client = () => { throw new Error('不应连接外部或无窗口的测试 AVD'); };
+
+    assert(!(await rt.adoptExisting()), '无内置 AVD 锁时不应接管任何实例');
+    fs.writeFileSync(pidFile, '101');
+    assert(!(await rt.adoptExisting()), '不应接管重用了锁 PID 的外部 AVD');
+    assert(await rt.emulator.killOrphanProcesses() === 0, '不应清理外部 AVD');
+    fs.mkdirSync(lock, { recursive: true });
+    fs.writeFileSync(pidFile, '102');
+    assert(!(await rt.adoptExisting()), '应跳过无窗口内置 AVD');
+
+    fs.writeFileSync(pidFile, '103');
+    rt.client = (serial) => ({
+      serial,
+      connect: async () => true,
+      shell: async (cmd) => cmd.includes('avd_name') ? 'apkstart' : '1',
+    });
+    let prepared;
+    rt.prepare = async (client) => { prepared = client.serial; };
+    const result = await rt.adoptExisting();
+    assert(result?.client.serial === '127.0.0.1:5559', '应接管带窗口的内置 AVD');
+    assert(prepared === result.client.serial, '只能初始化已确认的内置 AVD');
+  });
+
+  await test('显式连接已有运行时仍可直接使用指定外部设备', async () => {
+    store.saveSettings({ engine: { mode: 'attach' }, device: '127.0.0.1:5563' });
+    try {
+      const rt = new Runtime(TMP);
+      const attached = { serial: '127.0.0.1:5563', isOnline: async () => true };
+      rt.client = () => attached;
+      rt.prepare = async () => {};
+      rt.adoptExisting = async () => { throw new Error('显式连接不应接管内置运行时'); };
+
+      const result = await rt.ensure();
+      assert(result.client === attached, '应使用设置中选择的外部设备');
+    } finally {
+      store.saveSettings({ engine: { mode: 'builtin' } });
+    }
   });
 
   await test('预热与点击并发时只拉起一次运行时（幂等，不重复开机器）', async () => {

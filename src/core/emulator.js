@@ -190,66 +190,67 @@ class EmulatorEngine {
     }
   }
 
-  /**
-   * 清掉占着 AVD 锁的孤儿模拟器。
-   * emulator.exe 只是个启动器，真正的 qemu 被 spawn 成独立进程（detached），
-   * 所以只 kill 自己手上的 proc 句柄经常留个孤儿在那占着 multiinstance.lock，
-   * 下一次启动就会 FATAL "Running multiple emulators with the same AVD"。
-   * 按「AVD 锁里的 pid」+「命令行带本 AVD 名的 qemu/emulator」两个来源清。
-   */
+  emulatorProcess(pid) {
+    const command = '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); '
+      + "Get-CimInstance Win32_Process -Filter 'ProcessId = " + pid + "'"
+      + ' | Select-Object ExecutablePath,CommandLine | ConvertTo-Json -Compress';
+    return new Promise((resolve) => {
+      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command],
+        { windowsHide: true, timeout: 5000 }, (err, stdout) => {
+          try { resolve(err || !stdout.trim() ? null : JSON.parse(stdout)); }
+          catch (_) { resolve(null); }
+        });
+    });
+  }
+
+  /** 通过内置 AVD 的锁定位 QEMU，复核命令行以免误认重用了 PID 的进程。 */
+  async managedEmulator() {
+    if (process.platform !== 'win32') return null;
+    const { emulatorExe } = this.locate();
+    if (!emulatorExe) return null;
+    const avdHome = this.provisioner.paths().avdHome;
+    const pidFile = path.join(avdHome, AVD_NAME + '.avd', 'hardware-qemu.ini.lock', 'pid');
+    let pid;
+    try { pid = Number(fs.readFileSync(pidFile, 'utf8').trim()); } catch (_) { return null; }
+    if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+
+    const proc = await this.emulatorProcess(pid);
+    if (!proc?.ExecutablePath || !proc.CommandLine) return null;
+    const exe = path.normalize(proc.ExecutablePath).toLowerCase();
+    const qemuDir = path.join(path.dirname(emulatorExe), 'qemu', 'windows-x86_64').toLowerCase();
+    const name = path.basename(exe);
+    if (path.dirname(exe) !== qemuDir || !/^qemu-system-x86_64(?:-headless)?\.exe$/.test(name)) return null;
+
+    const args = (proc.CommandLine.match(/"[^"]*"|[^\s"]+/g) || []).map((s) => s.replace(/^"|"$/g, ''));
+    const avdIndex = args.indexOf('-avd');
+    const portIndex = args.indexOf('-port');
+    if (avdIndex < 0 || args[avdIndex + 1] !== AVD_NAME || portIndex < 0) return null;
+    const port = Number(args[portIndex + 1]);
+    if (!Number.isInteger(port) || port < 1 || port > 65534) return null;
+    const headless = name.endsWith('-headless.exe') || args.includes('-no-window') || args.includes('-qt-hide-window');
+    return { pid, port, headless };
+  }
+
+  /** 冷启动前只清理持有内置 AVD 锁的 QEMU。 */
   async killOrphanProcesses({ onLog = () => {} } = {}) {
     if (process.platform !== 'win32') return 0;
     const avdDir = path.join(this.provisioner.paths().avdHome, `${AVD_NAME}.avd`);
-
-    // 快速路径（每次冷启动都会走到）：
-    //  - 没有 .lock → 不可能有活着的 emulator 占着这个 AVD，直接返回；
-    //  - 有 lock 但端口没人监听 → 只是上次强杀留下的残留目录，清掉即可。
-    // 以前无论什么情况都要跑一次 wmic（1~3 秒，还很吃 CPU），冷启动时明显拖慢。
-    let locks = [];
-    try { locks = fs.readdirSync(avdDir).filter((f) => /\.lock$/i.test(f)); } catch (_) { locks = []; }
+    let locks;
+    try { locks = fs.readdirSync(avdDir).filter((f) => /\.lock$/i.test(f)); } catch (_) { return 0; }
     if (!locks.length) return 0;
-    if (!(await this._anyEmulatorPortAlive())) {
-      this.clearLocks(avdDir);
-      return 0;
-    }
 
-    const pids = new Set();
-    // 1) 锁文件里 emulator 自己写的 pid（最可靠）
-    try {
-      const f = path.join(avdDir, 'hardware-qemu.ini.lock', 'pid');
-      if (fs.existsSync(f) && fs.statSync(f).isFile()) {
-        const pid = parseInt(fs.readFileSync(f, 'utf8').trim(), 10);
-        if (pid) pids.add(pid);
-      }
-    } catch (_) { /* ignore */ }
-    // 2) 兜底：按进程名 + 端口找活着的 qemu（tasklist/netstat 比 wmic 快一个量级）
-    try {
-      const [tl, ns] = await Promise.all([
-        new Promise((res) => execFile('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (e, o) => res(e ? '' : String(o || '')))),
-        new Promise((res) => execFile('netstat', ['-ano', '-p', 'TCP'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (e, o) => res(e ? '' : String(o || '')))),
-      ]);
-      const qemuPids = new Set();
-      for (const line of tl.split('\n')) {
-        const m = /^"([^"]+)","(\d+)"/.exec(line.trim());
-        if (m && /qemu|emulator/i.test(m[1])) qemuPids.add(m[2]);
-      }
-      for (const line of ns.split('\n')) {
-        const m = /:(\d+)\s+\S+\s+LISTENING\s+(\d+)/i.exec(line);
-        if (m && qemuPids.has(m[2])) pids.add(Number(m[2]));
-      }
-    } catch (_) { /* 拿不到进程列表就只靠锁文件里的 pid */ }
-    pids.delete(process.pid);
-    if (!pids.size) {
+    const owned = await this.managedEmulator();
+    if (!owned) {
       this.clearLocks(avdDir);
       return 0;
     }
-    onLog(`清理 ${pids.size} 个残留模拟器进程`);
-    await Promise.all([...pids].map((pid) => new Promise((r) => {
-      execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => r());
-    })));
+    onLog('清理残留的内置模拟器进程');
+    await new Promise((resolve) => {
+      execFile('taskkill', ['/PID', String(owned.pid), '/T', '/F'], { windowsHide: true }, () => resolve());
+    });
     await sleep(1200);
     this.clearLocks(avdDir);
-    return pids.size;
+    return 1;
   }
 
   /** 5554~5620 里是否有 emulator 控制台端口在监听（连接被拒会立刻返回，代价极小） */
@@ -700,7 +701,7 @@ class EmulatorEngine {
     }
     await sleep(800);
     // proc 句柄常常已经没了（emulator.exe 启动完就退出，qemu 是 detached 的独立进程），
-    // 不按进程名兜底清一遍，下一轮就会被 AVD 锁挡成 FATAL。
+    // 不检查内置 AVD 的残留进程，下一轮就会被 AVD 锁挡成 FATAL。
     await this.killOrphanProcesses().catch(() => {});
   }
 

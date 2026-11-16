@@ -47,6 +47,8 @@ public class ApkAgent
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int i, int v);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hh, uint f);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int c);
+    [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr h, int c);
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
     // 裁剪嵌入窗口的可见区域：把压到标题栏上的那条外框去掉
     [DllImport("user32.dll")] static extern int SetWindowRgn(IntPtr h, IntPtr rgn, bool redraw);
     [DllImport("gdi32.dll")] static extern IntPtr CreateRectRgn(int l, int t, int r, int b);
@@ -95,6 +97,7 @@ public class ApkAgent
     const int WS_EX_WINDOWEDGE = 0x00000100;
     const uint SWP_NOZORDER = 0x0004;
     const uint SWP_NOACTIVATE = 0x0010;
+    const int SW_SHOWNOACTIVATE = 4;
     const uint SWP_SHOWWINDOW = 0x0040;
     const uint SWP_FRAMECHANGED = 0x0020;
     const uint SWP_NOMOVE = 0x0002;
@@ -638,6 +641,11 @@ public class ApkAgent
             ShowWindow(_emu, 0);
             return;
         }
+        // Electron 有时保留隐藏的渲染子窗口。它下面的 Qt 窗口即使有 WS_VISIBLE，
+        // 也会被父窗口一起隐藏。宿主显示时恢复这一层，最小化时不干预。
+        if (ep == _chromeRender && IsWindowVisible(_host) && !IsIconic(_host) && !IsWindowVisible(ep))
+            ShowWindowAsync(ep, SW_SHOWNOACTIVATE);
+
         // SWP_FRAMECHANGED forces Windows to recompute the whole non-client area and
         // repaint it. It is needed exactly once (right after SetParent); repeating it
         // on every periodic sweep caused visible stutter and wasted GPU/CPU.

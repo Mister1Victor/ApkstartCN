@@ -14,6 +14,8 @@ const APPS_FILE = path.join(DATA_DIR, 'apps.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 const DEFAULT_SETTINGS = {
+  // Interface language: 'auto' (follow Windows) | 'en' | 'zh-CN'. See src/i18n.
+  language: 'auto',
   adbPath: '',
   device: '127.0.0.1:5555',
   engine: {

@@ -34,13 +34,13 @@ function describeExitCode(code) {
   // 不能当成 0 报「正常退出」，但也谈不上异常，返回空串让调用方原样显示。
   if (code == null) return '';
   switch (Number(code)) {
-    case 0: return '正常退出';
-    case 1: return '启动参数或环境错误';
-    case 3221225477: return '0xC0000005 访问冲突，渲染后端崩溃';
-    case 3221225725: return '0xC00000FD 栈溢出';
-    case 3221225781: return '0xC0000135 缺少 DLL（VC++ 运行库 / 运行时组件被杀毒删除）';
-    case 3221225506: return '0xC0000022 拒绝访问（驱动或权限问题）';
-    case 3221225595: return '0xC000007B 镜像位数不匹配或 DLL 损坏';
+    case 0: return 'Normal çıkış';
+    case 1: return 'Başlatma parametresi veya ortam hatası';
+    case 3221225477: return '0xC0000005 erişim ihlali, işleme arka ucu çöktü';
+    case 3221225725: return '0xC00000FD yığın taşması';
+    case 3221225781: return '0xC0000135 DLL eksik (VC++ çalışma zamanı / bileşenler antivirüsçe silinmiş)';
+    case 3221225506: return '0xC0000022 erişim engellendi (sürücü veya izin sorunu)';
+    case 3221225595: return '0xC000007B imaj bit uyumsuzluğu veya bozuk DLL';
     default: return '';
   }
 }
@@ -273,7 +273,7 @@ class EmulatorEngine {
       this.clearLocks(avdDir);
       return 0;
     }
-    onLog(`清理 ${pids.size} 个残留模拟器进程`);
+    onLog(`Temizleniyor: ${pids.size} artık emülatör süreci`);
     await Promise.all([...pids].map((pid) => new Promise((r) => {
       execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => r());
     })));
@@ -404,7 +404,7 @@ class EmulatorEngine {
     const choice = this.imageChoice();
     const tag = choice.tag;
     const api = choice.api;
-    const tagDisplay = choice.compat ? 'Google Play (ARM 兼容)' : 'AOSP';
+    const tagDisplay = choice.compat ? 'Google Play (ARM uyumlu)' : 'AOSP';
 
     fs.writeFileSync(
       path.join(home, `${AVD_NAME}.ini`),
@@ -453,7 +453,7 @@ class EmulatorEngine {
     // 的 APEX 不兼容，不重建会一直卡在引导循环。改容量 / 改分辨率 / 换渲染后端都不算。
     fs.writeFileSync(keyFile, key, 'utf8');
 
-    // hw.cpu.arch 必须是 ABI 本身（x86_64 不能截成 x86）
+    // hw.cpu.arch 必须是 ABI 本身（x86_64 不能截成 x86)
     const cpuArch = choice.abi === 'arm64-v8a' ? 'arm64'
       : choice.abi === 'armeabi-v7a' ? 'arm' : choice.abi;
 
@@ -475,7 +475,7 @@ class EmulatorEngine {
       `hw.gpu.mode=${gpu}`,
       'hw.keyboard=yes',
       // 虚拟 Wi-Fi 必须显式打开。API 34 的 Play Store 镜像上网走的是
-      // wlan0（netsim 虚拟网卡），不是早期的 eth0。config.ini 里少了这一行，
+      // wlan0 (netsim 虚拟网卡），不是早期的 eth0。config.ini 里少了这一行，
       // 模拟器就不会给 wlan0 建链路——表现是 wlan0 一直 NO-CARRIER、
       // `dumpsys connectivity` 显示 Active default network: none，应用里就是
       // 一直「网络错误，请稍后再试」。命令行的 -netdelay/-netspeed/-dns-server
@@ -518,7 +518,7 @@ class EmulatorEngine {
    *     mke2fs。ApkStart 直接写 config.ini 拉 emulator，跳过那一步 → /data 全零 →
    *     内核 "Invalid ext4 superblock on /dev/block/vdc" → guest 掉进 recovery 重启循环 →
    *     adbd 永远不上线 → 上层 probe 一直 pending，最后 240s 超时。原表现：点开要等好几分钟。
-   *  2. emulator 自带的 e2fsck/resize2fs 是 cygwin 版 e2fsprogs 1.42.12，**不认识 encrypt
+   *  2. emulator 自带的 e2fsck/resize2fs 是 cygwin 版 e2fsprogs 1.42.12, **不认识 encrypt
    *     特性**，带这个位它直接 exit 8 拒绝干活，所以「扩文件系统」必须排在补位之前。
    *  3. 文件系统必须 ≥ 分区大小：只给 64MB 的话，APEX 解压 + dexopt 立刻写满，
    *     之后所有 setxattr 返回 ENOSPC → SELinux 标签写不进去 → netd/media/tombstoned
@@ -548,10 +548,10 @@ class EmulatorEngine {
         this._resize2fs(img);
         userdata.setEncryptFlag(img);
         const grown = userdata.fsBytes(img);
-        this.log(`userdata 扩容：文件 ${size} → ${wantBytes}，文件系统 ${fsBytes} → ${grown}`);
+        this.log(`userdata genişletme: dosya ${size} → ${wantBytes}, dosya sistemi ${fsBytes} → ${grown}`);
         return { ok: true, created: false, grown: true, size: wantBytes, fsBytes: grown };
       } catch (e) {
-        this.log(`扩容 userdata 失败（继续用现有分区）：${e.message}`);
+        this.log(`userdata genişletilemedi (mevcut bölüm kullanılmaya devam ediyor): ${e.message}`);
         // 老分区仍然可用，但必须如实告诉调用方「这次没扩成」，不能让设置页显示成功
         return { ok: false, created: false, size, fsBytes, error: e.message };
       }
@@ -566,12 +566,12 @@ class EmulatorEngine {
       this._qemuImg('resize', img, wantBytes);
       this._resize2fs(img);
       userdata.setEncryptFlag(img);
-      this.log(`已重建 userdata：${(wantBytes / 1024 / 1024 / 1024).toFixed(1)}GB ext4（4K block，支持 FBE）`);
+      this.log(`userdata yeniden oluşturuldu: ${(wantBytes / 1024 / 1024 / 1024).toFixed(1)}GB ext4 (4K blok, FBE destekli)`);
       return { ok: true, created: true, size: wantBytes };
     } catch (e) {
       // 尽力而为：哪怕扩容失败，也要把 encrypt 位补回去，让 FBE 能初始化（分区会偏小）
       try { userdata.setEncryptFlag(img); } catch (_) { /* ignore */ }
-      this.log(`重建 userdata 失败：${e.message}`);
+      this.log(`userdata yeniden oluşturulamadı: ${e.message}`);
       return { ok: false, created: true, error: e.message };
     }
   }
@@ -584,18 +584,18 @@ class EmulatorEngine {
     const r = spawnSync(exe, [op, '-f', 'raw', ...rest], {
       cwd: path.dirname(exe), windowsHide: true, encoding: 'utf8',
     });
-    if (r.status !== 0) throw new Error(`qemu-img ${op} 失败: ${(r.stderr || '').trim() || r.status}`);
+    if (r.status !== 0) throw new Error(`qemu-img ${op} başarısız: ${(r.stderr || '').trim() || r.status}`);
   }
 
-  /** emulator 自带 resize2fs.exe（cygwin 版，必须在 bin64 目录下跑才能找到 DLL） */
+  /** emulator 自带 resize2fs.exe (cygwin 版，必须在 bin64 目录下跑才能找到 DLL) */
   _resize2fs(img) {
     const bin = path.join(path.dirname(this.locate().emulatorExe), 'bin64');
     const exe = path.join(bin, 'resize2fs.exe');
-    if (!fs.existsSync(exe)) throw new Error('缺少 resize2fs.exe');
+    if (!fs.existsSync(exe)) throw new Error('resize2fs.exe eksik');
     const r = spawnSync(exe, [img], {
       cwd: bin, windowsHide: true, encoding: 'utf8', timeout: 180000,
     });
-    if (r.status !== 0) throw new Error(`resize2fs 失败: ${(r.stderr || '').trim() || r.status}`);
+    if (r.status !== 0) throw new Error(`resize2fs başarısız: ${(r.stderr || '').trim() || r.status}`);
   }
 
   /** emulator 依赖这些环境变量定位 SDK / AVD；中文路径一律转 8.3 短路径 */
@@ -614,7 +614,7 @@ class EmulatorEngine {
       ANDROID_ADB_SERVER_PORT: adbPort,
       ANDROID_EMULATOR_USE_SYSTEM_LIBS: '',
       ...(plan.accel === 'off' ? { ANDROID_I_WANT_MY_TCG: 'yes' } : {}),
-      // 驱动声明的环境变量：只放行 ANDROID_/QEMU_/LIBGL_/MESA_/EMUGL_ 前缀（见 drivers.js）
+      // 驱动声明的环境变量：只放行 ANDROID_/QEMU_/LIBGL_/MESA_/EMUGL_ 前缀（见 drivers.js)
       ...((this._driverEffect && this._driverEffect.env) || {}),
     };
   }
@@ -634,7 +634,7 @@ class EmulatorEngine {
     gpu = 'software', memoryMB = 2048, cores = 2,
     snapshot = true, wipe = false, lcd = null,
   } = {}) {
-    // 驱动可以固定渲染后端 / 强制软件模拟。放在最前面算进 gpu/accel，
+    // 驱动可以固定渲染后端 / 强制软件模拟。放在最前面算进 gpu/accel, 
     // 这样后面所有逻辑（-accel off、config.ini 的 hw.gpu.mode）都跟着它走。
     const eff = this._driverEffect || null;
     const drvGpu = eff ? drivers.gpuModeToArg(eff.gpuMode) : '';
@@ -654,7 +654,7 @@ class EmulatorEngine {
       '-memory', String(memoryMB),
       '-cores', String(cores),
     ];
-    // 网络：AOSP 模拟器默认走 QEMU 用户态 NAT（-netdev user），安卓侧拿到
+    // 网络：AOSP 模拟器默认走 QEMU 用户态 NAT (-netdev user），安卓侧拿到
     // 10.0.2.x 的虚拟地址，出口直接复用主机的物理网卡 NAT 出去。
     // 这种模式【不会】在 Windows 上创建任何虚拟网卡 / 虚拟交换机
     // （那必须 -netdev tap 或桥接才会发生，我们全程不启用）。
@@ -666,7 +666,7 @@ class EmulatorEngine {
     // 系统语言：默认简体中文。
     // 实测 `-prop persist.sys.locale=zh-CN` 完全无效 —— 模拟器会拦截 persist.sys.*
     // 这类受保护属性，ro.product.locale 又被镜像 build.prop 覆盖；guest 里 getprop
-    // 一个都看不到。官方专门给了 -change-locale：它会真正改系统语言并重启 framework，
+    // 一个都看不到。官方专门给了 -change-locale：它会真正改系统语言并重启 framework, 
     // 且会写进 /data，从快照恢复也能保留。
     // 用户可在设置里改成其它 locale 或关掉（engine.locale='off'）。
     const locale = this._guestLocale();
@@ -695,14 +695,14 @@ class EmulatorEngine {
     // 上层只看到「开机超时」，接着换参数重试，反而被 AVD 锁挡成
     // "Running multiple emulators with the same AVD"。
     // 快照参数决定「下次开机是 8 秒还是 90 秒」，这里是第二个致命点：
-    // 老实现「没有快照就传 -no-snapshot」，而 -no-snapshot 同时禁掉了**退出时保存**，
+    // 老实现「没有快照就传 -no-snapshot」，而 -no-snapshot 同时禁掉了**退出时保存**, 
     // 于是第一次冷启动结束后永远产生不了快照，用户每次点开都是全量引导。
     // 正确做法是 -no-snapshot-load：这次不加载（避免等一个不存在的快照），
     // 但退出时照常把内存状态写成 apkstart，下次就直接恢复。
     // 快照要占一份约 2~3GB 的 ram.bin（磁盘紧张的用户可以关掉，只影响启动速度）
     const wantSnapshot = this.settings?.engine?.keepSnapshot !== false;
     if (wipe) {
-      // 重置数据时不能加载旧快照（数据都对不上了），但**必须允许保存新快照**：
+      // 重置数据时不能加载旧快照（数据都对不上了），但**必须允许保存新快照**: 
       // 修复网络就是靠「重置后第一次开机有网 → 立刻存快照 → 下次恢复」这条链路，
       // 老写法这里推的是 -no-snapshot，会把保存一起关掉，快照永远存不下来。
       args.push('-no-snapshot-load');
@@ -771,10 +771,10 @@ class EmulatorEngine {
     proc.on('exit', (code) => {
       this.lastExitCode = code;
       const meaning = describeExitCode(code);
-      this.log(`emulator exit ${code}${meaning ? `（${meaning}）` : ''}`);
-      this._logWrite(logFile, `emulator exit ${code}${meaning ? `（${meaning}）` : ''}\n`);
+      this.log(`emulator exit ${code}${meaning ? ` (${meaning})` : ''}`);
+      this._logWrite(logFile, `emulator exit ${code}${meaning ? ` (${meaning})` : ''}\n`);
       this.proc = null;
-      onLog(`运行时已退出（code=${code}${meaning ? `，${meaning}` : ''}）`);
+      onLog(`Çalışma zamanı kapandı (code=${code}${meaning ? `, ${meaning}` : ''})`);
     });
     proc.on('error', (e) => {
       this.log(`spawn error: ${e.message}`);
@@ -783,7 +783,7 @@ class EmulatorEngine {
     });
 
     // qemu 是 detached 的独立进程，等它真正起来再把优先级降下来。
-    // 不降的话 2~4 个 vCPU 线程会以 Normal 优先级和 Windows 桌面抢 CPU，
+    // 不降的话 2~4 vCPU 线程会以 Normal 优先级和 Windows 桌面抢 CPU, 
     // 用户最直观的感受就是「一打开 ApkStart，鼠标就发飘、整机变卡」。
     const perf = this.settings?.engine?.priorityMode === 'performance';
     setTimeout(() => {
@@ -833,7 +833,7 @@ class EmulatorEngine {
    * 两种路径，取舍是实测出来的：
    *  - 没有 quickboot 覆盖层：就地扩（qemu-img resize + resize2fs），不丢已装应用；
    *  - 有覆盖层：guest 真正挂载的是 `userdata-qemu.img.qcow2`，底座扩到 8GB、
-   *    文件系统也长到 8GB，guest 里 `df /data` 依旧是 5.7GB（覆盖层还是旧大小），
+   *    文件系统也长到 8GB, guest 里 `df /data` 依旧是 5.7GB（覆盖层还是旧大小），
    *    而覆盖层里的文件系统没有 root 权限改不了。这种时候必须如实返回「需要重置」，
    *    不能再像以前那样返回成功 —— 用户会以为扩好了，装 50GB 游戏依旧半路失败。
    */
@@ -846,8 +846,8 @@ class EmulatorEngine {
         ok: false,
         needsReset: true,
         fsGB: this.dataInfo().fsGB,
-        error: `安卓正在用快速启动的差量盘，就地扩容改不到它（目标 ${wantGB} GB）。`
-          + '需要「重置安卓数据」后按新容量重建 /data —— 已装应用和存档会被清空，请先确认。',
+        error: `Android hızlı başlatma fark diskini kullanıyor, yerinde genişletme uygulanamaz (hedef ${wantGB} GB）。`
+          + '「Android verilerini sıfırla」 sonrası /data yeni kapasiteyle yeniden oluşturulmalı — kurulu uygulamalar ve kayıtlar silinir, önce onaylayın.',
       };
     }
     const r = this.ensureDataPartition(dir, dataMB);
@@ -861,8 +861,8 @@ class EmulatorEngine {
         ok: false,
         ...r,
         fsGB: Number((fsAfter / 1073741824).toFixed(1)),
-        error: `镜像已扩到 ${wantGB} GB，但文件系统只到 ${(fsAfter / 1073741824).toFixed(1)} GB（resize2fs 没成功）。`
-          + '可以再点一次「立即扩容」，或清理磁盘后重试。',
+        error: `İmaj şu boyuta genişletildi: ${wantGB} GB ama dosya sistemi yalnızca ${(fsAfter / 1073741824).toFixed(1)} GB (resize2fs başarısız).`
+          + '「Şimdi genişlet」e yeniden basabilir veya diski temizleyip tekrar deneyebilirsiniz.',
       };
     }
     return r;
@@ -907,8 +907,8 @@ class EmulatorEngine {
    * 重建本专用端口上的 adb server。
    *
    * 这里是「打开应用要等两分钟」最主要的元凶，历史实现只 kill-server 就返回了：
-   * emulator 在启动瞬间会去连 ANDROID_ADB_SERVER_PORT 上的 adb daemon，
-   * 连不上就**再也不注册这台设备** —— adb devices 里要么没有 emulator-5554，
+   * emulator 在启动瞬间会去连 ANDROID_ADB_SERVER_PORT 上的 adb daemon, 
+   * 连不上就**再也不注册这台设备** —— adb devices 里要么没有 emulator-5554, 
    * 要么永远停在 offline（日志里就是那句 "Unable to connect to adb daemon on port: 5044"）。
    * 于是上层 probe 一直拿不到 sys.boot_completed，白等 3 分钟超时后重试，
    * 每次重试都是全量冷启动，快照也因为「设备不在线」保存不了，形成死循环。
@@ -932,7 +932,7 @@ class EmulatorEngine {
     });
     await run(['kill-server'], 6000);
     await run(['start-server'], 12000);
-    // adb start-server 在部分机器上同步返回得很快，但端口还没真正 listen，
+    // adb start-server 在部分机器上同步返回得很快，但端口还没真正 listen, 
     // 这里等到能连上为止（最多 ~3 秒，正常几十毫秒）。
     const net = require('net');
     for (let i = 0; i < 25; i += 1) {
@@ -1024,7 +1024,7 @@ class EmulatorEngine {
       } catch (_) { resolve(''); }
     });
     // 安卓的多路由表会让 `ip route` 的主表看起来是空的（默认路由在 per-interface 表里），
-    // 而且 shell 的 uid 不在应用的 network 组里，`ping` 经常误报 "Network is unreachable"，
+    // 而且 shell 的 uid 不在应用的 network 组里，`ping` 经常误报 "Network is unreachable", 
     // 哪怕 Wi-Fi 其实已经连上、应用也能正常上网。所以这里只认「有没有拿到 IPv4 地址」，
     // 再叠加 `cmd wifi status` 的连接状态做交叉确认，不用 ping 判断。
     const addr = await sh('ip -o addr');
@@ -1055,9 +1055,9 @@ class EmulatorEngine {
     }
     const ip = ips[0];
     const gw = /^10\.0\.2\./.test(ip) ? '10.0.2.2' : ip.replace(/\.\d+$/, '.1');
-    // 有 IP 不等于能上网。实测拿到 10.0.2.16 但 DNS/路由被掐时，应用首页还是
+    // Toplam IP 不等于能上网。实测拿到 10.0.2.16 但 DNS/路由被掐时，应用首页还是
     // 「网络错误」，而上层却以为网络正常。这里补一次真实 HTTP 探测。
-    // 用 nc 直连 80 端口而不是 ping：QEMU 用户态 NAT 会拦 ICMP，ping 必然误报。
+    // 用 nc 直连 80 端口而不是 ping: QEMU 用户态 NAT 会拦 ICMP, ping 必然误报。
     // 只在「等待网络就绪」那条路径（waitMs>0）上做，快速轮询跳过——否则每 3 秒
     // 就要花 4 秒探测，反而把启动拖慢。结论放进 reachable，不改 ok：有 IP 就先
     // 让应用起来，一次 DNS 抖动不该卡住整个启动。
@@ -1081,7 +1081,7 @@ class EmulatorEngine {
    *   「Saved / Won't automatically connect」
    * 于是开机后 wlan0 永远 NO-CARRIER，应用里一直报网络错误。
    *
-   * 麻烦的是 shell（uid 2000）没有 NETWORK_SETTINGS 权限，
+   * 麻烦的是 shell (uid 2000）没有 NETWORK_SETTINGS 权限，
    * `cmd wifi connect-network` 会直接抛 SecurityException，所以不能走命令行。
    * 这里改为拉起 Wi-Fi 设置页、点一下那条已保存的网络——和用户手动点的效果一样。
    *
@@ -1177,15 +1177,15 @@ class EmulatorEngine {
       if (await this._consoleAlive()) {
         return { ok: true, reused: true, serial: this.serial, port: this.port };
       }
-      onLog('上一次的模拟器已经退出，重新开机…');
+      onLog('Önceki emülatör çıkmış, yeniden açılıyor…');
       this.proc = null;
     }
 
     const loc = this.locate();
-    if (!loc.emulatorExe) throw new Error('未安装运行时引擎，请先在「运行时」页完成部署');
+    if (!loc.emulatorExe) throw new Error('Çalışma zamanı motoru kurulu değil; önce 「Çalışma zamanı」 sayfasında kurulumu tamamlayın');
     const choice = this.imageChoice();
     if (choice.compat ? !this.provisioner.playImageInfo().ok : !this.provisioner.systemImageInfo().ok) {
-      throw new Error('系统镜像未就绪，请先在「运行时」页下载 Android 系统镜像');
+      throw new Error('Sistem imajı hazır değil; önce 「Çalışma zamanı」 sayfasından Android sistem imajını indirin');
     }
 
     const s = this.settings;
@@ -1198,16 +1198,16 @@ class EmulatorEngine {
     const diskMB = doctor.freeDiskMB(loc.root);
     const needMB = 2500;
     if (avdFreeMB && avdFreeMB < needMB) {
-      const msg = `磁盘空间不足：安卓数据目录（${avdHome}）所在磁盘只剩 ${(avdFreeMB / 1024).toFixed(1)} GB，`
-        + `运行时至少要 ${(needMB / 1024).toFixed(1)} GB 可用。请在「设置 → 系统集成 → 安卓数据目录」`
-        + '把它改到空间充足的盘（例如 D:），或先清理磁盘。你的应用与存档不会被自动删除。';
+      const msg = `Disk alanı yetersiz: Android veri dizini (${avdHome}) diski: yalnızca ${(avdFreeMB / 1024).toFixed(1)} GB, `
+        + `çalışma zamanı en az ${(needMB / 1024).toFixed(1)} GB boş alan istiyor. 「Ayarlar → Sistem tümleşimi → Android veri dizini」nden `
+        + 'daha geniş bir diske taşıyın (ör. D:), veya diski temizleyin. Uygulamalarınız ve kayıtlarınız otomatik silinmez.';
       this.log(msg);
       onLog(msg);
       return { ok: false, error: msg, needsSpace: true, attempts: [] };
     }
     if (diskMB && diskMB < 300) {
-      const msg = `运行时目录（${loc.root}）所在磁盘只剩 ${(diskMB / 1024).toFixed(1)} GB，`
-        + '连日志和临时文件都写不下。请清理磁盘，或把「运行时数据目录」也换到别的盘。';
+      const msg = `Çalışma zamanı dizini (${loc.root}) diski: yalnızca ${(diskMB / 1024).toFixed(1)} GB, `
+        + 'log ve geçici dosyalar bile yazılamıyor. Diski temizleyin veya 「Çalışma zamanı veri dizini」ni de başka diske taşıyın.';
       this.log(msg);
       onLog(msg);
       return { ok: false, error: msg, needsSpace: true, attempts: [] };
@@ -1236,17 +1236,17 @@ class EmulatorEngine {
     try {
       drv = this._resolveDrivers({ accel: accelInfo, emulatorVersion: emuVersion });
     } catch (e) {
-      this.log(`驱动加载失败：${e.message}`);
-      onLog(`驱动加载失败（已忽略，按默认参数启动）：${e.message}`);
+      this.log(`Sürücü yüklenemedi: ${e.message}`);
+      onLog(`Sürücü yüklenemedi (yoksayıldı, varsayılan parametrelerle başlatılıyor): ${e.message}`);
     }
     if (drv.applied.length) {
-      onLog(`已应用驱动：${drv.applied.map((d) => `${d.name} v${d.version}`).join('、')}`);
+      onLog(`Uygulanan sürücü: ${drv.applied.map((d) => `${d.name} v${d.version}`).join('、')}`);
       for (const n of (this._driverEffect.notes || []).slice(0, 4)) onLog(`· ${n}`);
     } else {
-      onLog('未匹配到任何驱动，按默认参数启动');
+      onLog('Hiçbir sürücü eşlemedi, varsayılan parametrelerle başlatılıyor');
     }
     if (drv.errors && drv.errors.length) {
-      onLog(`有 ${drv.errors.length} 个驱动文件没加载成功（设置 → 驱动 里能看到原因）`);
+      onLog(`Toplam ${drv.errors.length} sürücü dosyası yüklenemedi (nedeni Ayarlar → Sürücüler'de görülebilir)`);
     }
 
     // 与设置页 / 诊断报告共用同一个入口，保证「显示的」就是「实跑的」
@@ -1262,11 +1262,11 @@ class EmulatorEngine {
       const gpuFixed = drivers.gpuModeToArg(this._driverEffect.gpuMode);
       if (gpuFixed) {
         variants = variants.map((v) => ({ ...v, gpu: gpuFixed }));
-        onLog(`驱动把渲染后端固定为 ${gpuFixed}`);
+        onLog(`Sürücü işleme arka ucunu sabitledi: ${gpuFixed}`);
       }
       if (this._driverEffect.forceTcg) {
-        variants = variants.map((v) => ({ ...v, accel: 'off', label: `${v.gpu} / 驱动要求软件模拟` }));
-        onLog('驱动要求关闭硬件加速（走软件模拟）');
+        variants = variants.map((v) => ({ ...v, accel: 'off', label: `${v.gpu} / sürücü yazılım emülasyonu istiyor` }));
+        onLog('Sürücü donanım hızlandırmayı kapatmayı istiyor (yazılım emülasyonu)');
       }
     }
 
@@ -1281,7 +1281,7 @@ class EmulatorEngine {
       const rank = (v) => (v.gpu === badGpu ? 1 : 0);
       variants.sort((a, b) => rank(a) - rank(b));
       if (variants[0] && variants[0].gpu === badGpu && variants.length > 1) {
-        onLog(`上次 ${badGpu} 渲染后端启动即崩溃，本次改用 ${variants[1].gpu} 先试`);
+        onLog(`Önceki ${badGpu} işleme arka ucu açılışta çöktü; bu sefer şununla denenecek: ${variants[1].gpu} ilk denenecek`);
       }
     }
 
@@ -1314,7 +1314,7 @@ class EmulatorEngine {
       // 日志也按轮切分：内存日志是跨轮累积的，第 1 轮的崩溃行若留在尾部，
       // 第 2 轮（比如换后端后端口冲突）会被误诊成同一个崩溃。
       const logStart = this._log.length;
-      onLog(`启动运行时（第 ${i + 1}/${variants.length} 次：${plan.label}）…`);
+      onLog(`Çalışma zamanı başlatılıyor (${i + 1}/${variants.length}. deneme: ${plan.label})…`);
 
       // eslint-disable-next-line no-await-in-loop
       const avd = this.ensureAvd({
@@ -1344,11 +1344,11 @@ class EmulatorEngine {
         const d = doctor.diagnose(this._attemptLines(logStart, 60));
         this.attempts.push({ plan: plan.label, diagnosis: d.code, exitCode: this.lastExitCode });
         this.lastDiagnosis = d;
-        lastError = `${d.title}：${d.hint}`;
+        lastError = `${d.title}: ${d.hint}`;
         // 磁盘写满不是「换组参数就能好」的问题：继续重试只会反复失败，
         // 而且历史上最后那组参数带 wipe，会把用户数据一起抹掉。直接收工、如实报错。
         if (d.code === 'DISK_FULL') {
-          onLog('磁盘空间不足，已停止重试（不会动你的应用与存档）。');
+          onLog('Disk alanı yetersiz, yeniden deneme durduruldu (uygulamalarınıza ve kayıtlarınıza dokunulmaz).');
           this._persistFailure({ profile, why: 'disk-full' });
           return { ok: false, error: lastError, needsSpace: true, attempts: this.attempts, exitCode: this.lastExitCode };
         }
@@ -1356,7 +1356,7 @@ class EmulatorEngine {
         if (['ACCEL', 'GPU_INIT', 'GPU_MODE', 'IMAGE', 'DLL', 'ACCESS_VIOLATION'].includes(d.code)) {
           try { this.provisioner.invalidateEnvCache(); } catch (_) { /* ignore */ }
         }
-        onLog(`${d.title}，自动换一组参数重试…`);
+        onLog(`${d.title}, başka parametrelerle yeniden denenecek…`);
         this._noteGpuFailure(plan);
         continue;
       }
@@ -1400,7 +1400,7 @@ class EmulatorEngine {
         // 每 15 秒一条进度：以前用「取模」判断，自适应间隔下会连着打两三条重复的
         if (Date.now() - lastNotice > 15000) {
           lastNotice = Date.now();
-          onLog(`正在开机… ${Math.round((Date.now() - started) / 1000)}s`);
+          onLog(`Açılıyor… ${Math.round((Date.now() - started) / 1000)}s`);
         }
         // eslint-disable-next-line no-await-in-loop
         await sleep(interval);
@@ -1415,7 +1415,7 @@ class EmulatorEngine {
         // job 对象会连带杀掉子进程），下次打开有没有快照直接决定是 25 秒还是 7 秒。
         // 装完新应用时 installer 会作废快照，避免"重启后应用消失"。
         this.snapshotWorthSaving = true;
-        onLog(`运行时就绪（${Math.round(bootMs / 1000)}s，${plan.label}）`);
+        onLog(`Çalışma zamanı hazır (${Math.round(bootMs / 1000)}s, ${plan.label})`);
         // 开机成功不等于能用：顺手体检网络。虚拟机没网时，需要联网的页面会一直黑屏，
         // 用户只会说「这个应用黑屏」，很难联想到是网络。这里主动查一次并说清楚。
         //
@@ -1429,9 +1429,9 @@ class EmulatorEngine {
           network = await this.checkNetwork('', { waitMs: 12000, interval: 3000 });
         } catch (_) { /* 体检失败不算启动失败 */ }
         if (network && !network.ok) {
-          onLog('⚠ 安卓虚拟机暂时没连上网（Wi-Fi 未关联或没拿到地址）。'
-            + '需要联网的应用打开后可能一直黑屏：稍后重开应用即可；'
-            + '若持续无网，可在「设置 → 修复网络」重连（不会删除已装应用）。');
+          onLog('⚠ Android sanal makinesi şu an ağa bağlı değil (Wi-Fi ilişkilendirilmemiş veya adres alınamamış).'
+            + 'İnternet isteyen uygulamalar açılınca siyah ekranda kalabilir: uygulamayı sonra yeniden açın;'
+            + 'Ağ sürekli yoksa 「Ayarlar → Ağı onar」dan yeniden bağlanabilirsiniz (kurulu uygulamalar silinmez).');
         }
         return {
           ok: true, serial: this.serial, port, accel: accelInfo, logFile,
@@ -1443,8 +1443,8 @@ class EmulatorEngine {
       const d = fatal ? (this.lastDiagnosis || doctor.diagnose(attemptLines)) : doctor.diagnose(attemptLines);
       this.attempts.push({ plan: plan.label, diagnosis: d.code, timeout: !fatal, exitCode: this.lastExitCode });
       this.lastDiagnosis = d;
-      lastError = fatal ? `${d.title}：${d.hint}` : '开机超时（可能是首次引导较慢或硬件加速未生效）';
-      onLog(`${lastError}，自动换一组参数重试…`);
+      lastError = fatal ? `${d.title}: ${d.hint}` : 'Açılış zaman aşımı (ilk önyükleme yavaş olabilir veya donanım hızlandırma etkin değil)';
+      onLog(`${lastError}, başka parametrelerle yeniden denenecek…`);
       // 授权对话框卡住不是渲染后端的问题，别把当前 GPU 记进「启动即崩」黑名单，
       // 否则下次启动会无缘无故跳过用户机器本来能用的后端。
       if (d.code !== 'ADB_UNAUTHORIZED') this._noteGpuFailure(plan);
@@ -1464,9 +1464,9 @@ class EmulatorEngine {
       },
     });
     const err = new Error(
-      `运行时多次尝试仍未能启动（${d.title}）。\n${d.hint}\n\n`
-      + `已尝试：${this.attempts.map((a) => `${a.plan} → ${a.diagnosis}`).join('；')}\n`
-      + `诊断报告：${report.file}`,
+      `Çalışma zamanı birçok denemeye rağmen başlamadı (${d.title}）。\n${d.hint}\n\n`
+      + `Denenenler: ${this.attempts.map((a) => `${a.plan} → ${a.diagnosis}`).join('; ')}\n`
+      + `Tanılama raporu: ${report.file}`,
     );
     err.diagnosis = d;
     err.report = report.file;
@@ -1510,7 +1510,7 @@ class EmulatorEngine {
         const freeMB = require('./doctor').freeDiskMB(store.DATA_DIR);
         const needMB = Math.round(Number(this.profile?.memoryMB || 3072) * 1.15) + 1024;
         if (freeMB && freeMB < needMB) {
-          this.log(`跳过快照保存：磁盘剩余 ${(freeMB / 1024).toFixed(1)}GB < 需要 ${(needMB / 1024).toFixed(1)}GB`);
+          this.log(`Anlık görüntü kaydı atlandı: diskte kalan ${(freeMB / 1024).toFixed(1)}GB < gereken ${(needMB / 1024).toFixed(1)}GB`);
           return;
         }
         await this.saveSnapshotNow(adbPath).catch(() => false);
@@ -1545,7 +1545,7 @@ class EmulatorEngine {
       await this._saveViaAdb(adbPath, { timeout: 60000 });
     }
     if (!healthy && this.snapshotWorthSaving !== false) {
-      this.log('关机时 guest 未授权/未就绪：将作废快照，下次冷启动重新注入调试授权');
+      this.log('Kapanışta guest yetkisiz/hazır değil: anlık görüntü geçersiz kılınacak, sonraki soğuk açılışta hata ayıklama izni yeniden eklenecek');
     }
     if (adbPath) {
       await new Promise((resolve) => {
@@ -1629,7 +1629,7 @@ class EmulatorEngine {
   async _saveViaAdb(adbPath, { timeout = 45000 } = {}) {
     if (!adbPath) return false;
     if (!(await this._adbGuestHealthy(adbPath))) {
-      this.log('跳过快照保存：guest 未授权或未开机完成（避免存入未授权的毒快照）');
+      this.log('Anlık görüntü kaydı atlandı: guest yetkisiz veya açılış tamamlanmadı (yetkisiz bozuk anlık görüntü kaydedilmesin diye)');
       return false;
     }
     return new Promise((resolve) => {

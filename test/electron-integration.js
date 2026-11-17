@@ -44,11 +44,11 @@ app.whenReady().then(async () => {
       let decoded = 0;
       const viaDecode = await iconToIco(webp, {
         decode: async () => { decoded++; return png; },
-        onFallback: (why) => { throw new Error(`不该降级：${why}`); },
+        onFallback: (why) => { throw new Error(`不该降级: ${why}`); },
       });
       // nativeImage 若某天能直接解 WebP，decoded 会是 0，同样算通过；关键是产出合法 ICO
       step('WebP 图标最终产出 ICO', !!viaDecode && viaDecode.readUInt16LE(2) === 1,
-        `decode 调用 ${decoded} 次，${viaDecode ? viaDecode.length : 0} bytes`);
+        `decode 调用 ${decoded} 次, ${viaDecode ? viaDecode.length : 0} bytes`);
     }
 
     // 2. 快捷方式
@@ -60,7 +60,7 @@ app.whenReady().then(async () => {
       iconIcoPath: path.join(OUT, 'icon.ico'),
       description: 'ApkStart 集成测试',
     });
-    step('创建 .lnk', fs.existsSync(lnk));
+    step('Oluşturuluyor: .lnk', fs.existsSync(lnk));
     removeShortcut(lnk);
     step('删除 .lnk', !fs.existsSync(lnk));
 
@@ -79,7 +79,7 @@ app.whenReady().then(async () => {
         fs.writeFileSync(path.join(OUT, 'app.ico'), iconIco);
         step('APK 图标 → 多尺寸 ICO', true, `${meta.label}: ${iconIco.length} bytes`);
       } else {
-        step('APK 图标 → 多尺寸 ICO', false, 'pngToIco 返回空（图标可能是 webp/jpg 之外的格式）');
+        step('APK 图标 → 多尺寸 ICO', false, 'pngToIco 返回空 (图标可能是 webp/jpg 之外的格式)');
       }
     }
 

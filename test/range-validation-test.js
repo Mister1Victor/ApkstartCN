@@ -44,11 +44,11 @@ const baseOf = (server) => `http://127.0.0.1:${server.address().port}`;
     const res = { headers: { 'content-range': 'bytes 100-199/500' } };
     assert.equal(validRange(res, 100, 199, 500), true);
   });
-  test('validRange 拒绝错误起点/终点/总大小/长度', () => {
+  test('validRange 拒绝错误起点/终点/总BüyükKüçük/长度', () => {
     const hdr = (cr, len) => ({ headers: { 'content-range': cr, 'content-length': len } });
     assert.equal(validRange(hdr('bytes 101-199/500', '99'), 100, 199, 500), false, '起点不符');
     assert.equal(validRange(hdr('bytes 100-198/500', '99'), 100, 199, 500), false, '终点不符');
-    assert.equal(validRange(hdr('bytes 100-199/400', '100'), 100, 199, 500), false, '总大小不符');
+    assert.equal(validRange(hdr('bytes 100-199/400', '100'), 100, 199, 500), false, '总BüyükKüçük不符');
     assert.equal(validRange(hdr('bytes 100-199/500', '99'), 100, 199, 500), false, '长度不符');
     assert.equal(validRange(hdr('', '100'), 100, 199, 500), false, '缺少 Content-Range');
     assert.equal(validRange(hdr('bytes 0-3/8', '4'), 0, 3, 8), true);
@@ -78,7 +78,7 @@ const baseOf = (server) => `http://127.0.0.1:${server.address().port}`;
     });
     const base = baseOf(server);
     try {
-      await atest('单流 416：丢弃坏残片并重新完整下载', async () => {
+      await atest('单流 416: 丢弃坏残片并重新完整下载', async () => {
         const out = path.join(dir, 'one');
         fs.writeFileSync(out, 'corrupt data');
         await download(`${base}/416`, out);
@@ -88,14 +88,14 @@ const baseOf = (server) => `http://127.0.0.1:${server.address().port}`;
       await atest('单流 206 范围不符时拒绝', async () => {
         const out = path.join(dir, 'resume');
         fs.writeFileSync(out, 'xxxx'); // 让请求带 Range: bytes=4-
-        await assert.rejects(download(`${base}/bad`, out), /范围/);
+        await assert.rejects(download(`${base}/bad`, out), /aralığı/);
       });
 
-      await atest('downloadParallel 范围不符时拒绝，不留半截文件', async () => {
+      await atest('downloadParallel 范围不符时拒绝, 不留半截文件', async () => {
         const out = path.join(dir, 'two');
         await assert.rejects(
           downloadParallel(`${base}/bad`, out, { connections: 2, minChunk: 2, retries: 1 }),
-          /范围/,
+          /aralığı/,
         );
         assert.equal(fs.existsSync(out), false, '失败后目标文件应被清理');
       });
@@ -104,11 +104,11 @@ const baseOf = (server) => `http://127.0.0.1:${server.address().port}`;
         const out = path.join(dir, 'three');
         await assert.rejects(
           downloadMulti([`${base}/bad1`, `${base}/bad2`], out, { connections: 2, minChunk: 2, retries: 1 }),
-          /范围/,
+          /aralığı/,
         );
       });
 
-      await atest('合法范围下载仍然成功（无回归）', async () => {
+      await atest('合法范围下载仍然成功 (无回归)', async () => {
         const out = path.join(dir, 'ok');
         const r = await download(`${base}/ok`, out, { retries: 1 });
         assert.equal(fs.readFileSync(out, 'utf8'), 'abcdefgh');
@@ -121,6 +121,6 @@ const baseOf = (server) => `http://127.0.0.1:${server.address().port}`;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
+  console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

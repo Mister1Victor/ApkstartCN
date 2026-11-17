@@ -83,24 +83,24 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
   await test('完整下载 + 跟随重定向', async () => {
     const dest = path.join(TMP, 'dl1.bin');
     await download(`http://127.0.0.1:${port}/redirect`, dest);
-    assert(fs.statSync(dest).size === payload.length, '大小不符');
+    assert(fs.statSync(dest).size === payload.length, 'BüyükKüçük不符');
   });
 
-  await test('断点续传（已有半截文件）', async () => {
+  await test('断点续传 (已有半截文件)', async () => {
     const dest = path.join(TMP, 'dl2.bin');
     fs.writeFileSync(dest, payload.subarray(0, 100000));
     let lastPercent = 0;
     await download(`http://127.0.0.1:${port}/big.bin`, dest, {
       onProgress: (p) => { lastPercent = p.percent; },
     });
-    assert(fs.statSync(dest).size === payload.length, `续传后大小 ${fs.statSync(dest).size}`);
+    assert(fs.statSync(dest).size === payload.length, `续传后BüyükKüçük ${fs.statSync(dest).size}`);
     assert(fs.readFileSync(dest).equals(payload), '续传内容不一致');
     assert(lastPercent > 50, '未上报进度');
   });
 
   await test('HEAD 探测 + SHA256', async () => {
     const h = await head(`http://127.0.0.1:${port}/big.bin`);
-    assert(h.size === payload.length, 'HEAD 大小不符');
+    assert(h.size === payload.length, 'HEAD BüyükKüçük不符');
     const sum = await sha256File(path.join(TMP, 'dl1.bin'));
     assert(/^[0-9a-f]{64}$/.test(sum), 'sha256 格式异常');
   });
@@ -115,7 +115,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
     assert(!fs.existsSync(dest), '校验失败应删除文件');
   });
 
-  await test('并行分块下载：多连接拼接内容一致', async () => {
+  await test('并行分块下载: 多连接拼接内容一致', async () => {
     const dest = path.join(TMP, 'dl4.bin');
     server.rangeHits = 0;
     let maxPercent = 0;
@@ -125,12 +125,12 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
       onProgress: (p) => { maxPercent = Math.max(maxPercent, p.percent); },
     });
     assert(fs.readFileSync(dest).equals(payload), '分块拼接后内容不一致');
-    assert(r.parallel > 1, `未启用并行：${r.parallel}`);
-    assert(server.rangeHits >= r.parallel, `分块请求数偏少：${server.rangeHits}`);
+    assert(r.parallel > 1, `未启用并行: ${r.parallel}`);
+    assert(server.rangeHits >= r.parallel, `分块请求数偏少: ${server.rangeHits}`);
     assert(maxPercent > 0, '未上报进度');
   });
 
-  await test('源不支持 Range 时自动回退单流', async () => {
+  await test('源不支持 Range 时Otomatik回退单流', async () => {
     const dest = path.join(TMP, 'dl5.bin');
     const r = await downloadParallel(`http://127.0.0.1:${port}/norange.bin`, dest, {
       connections: 8,
@@ -146,20 +146,20 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
   const { Provisioner } = require('../src/core/provision');
   const store = require('../src/core/store');
 
-  await test('默认运行时目录位于数据目录下', async () => {
+  await test('默认Çalışma zamanı目录位于数据目录下', async () => {
     const p = new Provisioner('C:/fake/app');
     assert(p.paths().root.startsWith(store.DATA_DIR), `路径异常: ${p.paths().root}`);
     assert(p.paths().qemuExe.endsWith('qemu-system-x86_64.exe'), 'qemu 路径异常');
-    assert(p.paths().adbExe.endsWith('adb.exe'), 'adb 路径异常');
+    assert(p.paths().adbExe.endsWith('adb.exe'), 'adb yolu异常');
   });
 
-  await test('空环境检查：adb 未就绪，组件结构完整', async () => {
+  await test('空环境检查: adb hazır değil, 组件结构完整', async () => {
     const p = new Provisioner(path.join(TMP, 'nonexistent'));
     const env = await p.checkEnv();
-    assert(env.adb.ok === false, 'adb 不应就绪');
+    assert(env.adb.ok === false, 'adb 不应hazır');
     // QEMU 可能已被系统级安装（如 winget 到 Program Files），此时应当被发现
-    if (env.qemu.ok) assert(env.qemu.version, 'qemu 就绪时必须带版本号');
-    assert(env.ready === false, '不应就绪');
+    if (env.qemu.ok) assert(env.qemu.version, 'qemu hazır时必须带版本号');
+    assert(env.ready === false, '不应hazır');
     assert(typeof env.hypervisor.whpx === 'boolean', '缺少超管信息');
   });
 
@@ -208,7 +208,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
     assert(absUrl('https://example.com/a.zip') === 'https://example.com/a.zip', '绝对地址被改写');
   });
 
-  await test('解析出的 emulator / 系统镜像地址都是可下载的绝对 URL', async () => {
+  await test('解析出的 emulator / Sistem imajı地址都是可下载的绝对 URL', async () => {
     const p = new Provisioner(TMP);
     const emuUrl = await p.resolveEmulatorUrl();
     const imgUrl = await p.resolveSysimgUrl();
@@ -219,29 +219,29 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
     assert(/windows_x64/i.test(emuUrl), `emulator 包平台不对: ${emuUrl}`);
   });
 
-  await test('AVD 配置使用 64 位架构（x86_64 不能被截成 x86）', async () => {
+  await test('AVD 配置使用 64 位架构 (x86_64 不能被截成 x86)', async () => {
     const { EmulatorEngine } = require('../src/core/emulator');
     const emu = new EmulatorEngine(TMP);
     const r = emu.ensureAvd({ memoryMB: 2048, cores: 2 });
     const cfg = fs.readFileSync(path.join(r.avdDir, 'config.ini'), 'utf8');
-    assert(/^hw\.cpu\.arch=x86_64$/m.test(cfg), `hw.cpu.arch 应为 x86_64，实际：${cfg.match(/^hw\.cpu\.arch=.*$/m)}`);
+    assert(/^hw\.cpu\.arch=x86_64$/m.test(cfg), `hw.cpu.arch 应为 x86_64, 实际: ${cfg.match(/^hw\.cpu\.arch=.*$/m)}`);
     assert(/^abi\.type=x86_64$/m.test(cfg), 'abi.type 应为 x86_64');
     assert(/^image\.sysdir\.1=\S*system-images\//m.test(cfg), 'image.sysdir.1 缺失');
   });
 
-  await test('安装失败原因翻译：NO_MATCHING_ABIS 给出中文指引', async () => {
+  await test('Kurulum başarısız原因翻译: NO_MATCHING_ABIS 给出中文指引', async () => {
     const { friendlyInstallError } = require('../src/core/adb');
     const out = friendlyInstallError(
       'Performing Streamed Install\nadb.exe: failed to install x.apk: '
       + 'Failure [INSTALL_FAILED_NO_MATCHING_ABIS: Failed to extract native libraries, res=-113]',
     );
-    assert(out.includes('ARM 原生库'), `应解释 ARM 原生库问题：${out}`);
+    assert(out.includes('ARM yerel kütüphaneleri'), `应解释 ARM 原生库问题: ${out}`);
     assert(out.includes('INSTALL_FAILED_NO_MATCHING_ABIS'), '应保留原始错误码');
     const other = friendlyInstallError('Failure [INSTALL_FAILED_INVALID_APK: x]');
-    assert(other.includes('损坏') || other.includes('不完整'), `未知错误也应可读：${other}`);
+    assert(other.includes('tamamlanmadı') || other.includes('bozuk'), `Bilinmeyen hata也应可读: ${other}`);
   });
 
-  await test('镜像校验：区分有效 ISO9660 / 损坏 / 未下完', async () => {
+  await test('镜像校验: 区分有效 ISO9660 / 损坏 / 未下完', async () => {
     const p = new Provisioner(TMP);
     const mk = (file, size, writeMagic) => {
       const fd = fs.openSync(file, 'w');
@@ -256,23 +256,23 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
 
     const good = mk(path.join(TMP, 'good.iso'), 450 * 1024 * 1024, true);
     const a = p.inspectIso(good);
-    assert(a.ok && a.iso9660, `有效 ISO 被判无效：${a.reason}`);
+    assert(a.ok && a.iso9660, `有效 ISO 被判无效: ${a.reason}`);
 
     const broken = mk(path.join(TMP, 'broken.iso'), 450 * 1024 * 1024, false);
     const b = p.inspectIso(broken);
-    assert(!b.ok && /ISO9660/.test(b.reason), `损坏镜像未被拦截：${JSON.stringify(b)}`);
+    assert(!b.ok && /ISO9660/.test(b.reason), `损坏镜像未被拦截: ${JSON.stringify(b)}`);
 
     const partial = mk(path.join(TMP, 'partial.iso'), 2 * 1024 * 1024, true);
     const c = p.inspectIso(partial);
-    assert(!c.ok && /未完成/.test(c.reason), `未下完的镜像未被拦截：${JSON.stringify(c)}`);
+    assert(!c.ok && /tamamlanmadı/.test(c.reason), `未下完的镜像未被拦截: ${JSON.stringify(c)}`);
 
     for (const f of [good, broken, partial]) fs.rmSync(f, { force: true });
   });
 
-  await test('远端 stat 列表解析（真实 mtime，避免无限重传）', async () => {
+  await test('远端 stat 列表解析 (真实 mtime, 避免无限重传)', async () => {
     const { parseStatList } = require('../src/core/adb');
     const rows = parseStatList('1794309868|1234|./a.txt\n1794309900|99|./sub/b.png');
-    assert(rows && rows.length === 2, `解析数量异常：${JSON.stringify(rows)}`);
+    assert(rows && rows.length === 2, `解析数量异常: ${JSON.stringify(rows)}`);
     assert(rows[0].rel === 'a.txt' && rows[0].size === 1234, '首行字段错误');
     assert(rows[1].rel === 'sub/b.png', '子目录相对路径错误');
     assert(rows[1].mtime === 1794309900000, 'mtime 未换算为毫秒');
@@ -283,7 +283,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
   console.log('\n[engine.js]');
   const { Runtime } = require('../src/core/engine');
 
-  await test('QEMU 启动参数：安装模式挂载 ISO 并从光驱启动', async () => {
+  await test('QEMU 启动参数: 安装模式挂载 ISO 并从光驱启动', async () => {
     const rt = new Runtime(TMP);
     rt._hv = { whpx: true };
     store.saveSettings({
@@ -300,7 +300,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
     assert(/-m 4096/.test(args), '内存参数错误');
   });
 
-  await test('QEMU 启动参数：正常启动从磁盘引导', async () => {
+  await test('QEMU 启动参数: 正常启动从磁盘引导', async () => {
     const rt = new Runtime(TMP);
     rt._hv = { whpx: false };
     const args = rt.buildArgs({ install: false }).join(' ');
@@ -318,7 +318,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
     assert(args.includes('-display none'), '应无窗口');
   });
 
-  await test('QEMU monitor 协议：握手并下发命令', async () => {
+  await test('QEMU monitor 协议: 握手并下发命令', async () => {
     // 模拟 QEMU monitor：连上后回 "(qemu) "，收到命令后回 ok
     const srv = net.createServer((sock) => {
       sock.write('QEMU 8.2.0 monitor - type \'help\' for more information\r\n(qemu) ');
@@ -335,16 +335,16 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
     await new Promise((r) => srv.close(r));
   });
 
-  await test('未安装系统时 ensure 返回 needsSetup', async () => {
+  await test('Kurulu değil系统时 ensure 返回 needsSetup', async () => {
     store.saveSettings({ runtime: { installed: false }, engine: { mode: 'builtin' } });
     const rt = new Runtime(TMP);
     // 用假 adb 保证 isOnline 快速失败
     const r = await rt.ensure({ onLog: () => {} });
-    assert(r.ok === false, '不应就绪');
+    assert(r.ok === false, '不应hazır');
     assert(['provision', 'install'].includes(r.needsSetup), `needsSetup=${r.needsSetup}`);
   });
 
-  await test('预热与点击并发时只拉起一次运行时（幂等，不重复开机器）', async () => {
+  await test('预热与点击并发时只拉起一次Çalışma zamanı (幂等, 不重复开机器)', async () => {
     const rt = new Runtime(TMP);
     rt.provisioner.checkEnv = async () => ({ adb: { ok: true }, emulator: { ok: true }, sysimg: { ok: true } });
     rt.emulator.setPriority = async () => 0;
@@ -356,11 +356,11 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
     };
     // 预热（启动 4 秒后自动跑）与用户点开应用（ensure）会同时发生
     const [a, b] = await Promise.all([rt.prewarm({}), rt.ensure({})]);
-    assert(calls === 1, `底层开机被触发 ${calls} 次，应只拉起一台模拟器`);
-    assert(a && a.ok && b && b.ok, '两条路径都应拿到就绪结果');
+    assert(calls === 1, `底层开机被触发 ${calls} 次, 应只拉起一台模拟器`);
+    assert(a && a.ok && b && b.ok, '两条路径都应拿到hazır结果');
   });
 
-  await test('启动就绪判定：必须等到 boot_completed + 包管理器', async () => {
+  await test('启动hazır判定: 必须等到 boot_completed + 包管理器', async () => {
     const rt = new Runtime(TMP);
     const calls = [];
     const fake = {
@@ -374,43 +374,43 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || '断言失败'); 
       },
     };
     const r = await rt.waitAndroidReady(fake, 5000, () => {});
-    assert(r.ok, '应当判定为已就绪');
+    assert(r.ok, '应当判定为hazır');
     assert(calls.some((c) => c.includes('sys.boot_completed')), '未检查 boot_completed');
     assert(calls.some((c) => c.includes('pm path android')), '未检查包管理器');
   });
 
-  await test('系统未启动完成时返回阶段（kernel）', async () => {
+  await test('系统未启动Tamam时返回阶段 (kernel)', async () => {
     const rt = new Runtime(TMP);
     const fake = { isOnline: async () => true, connect: async () => true, shell: async () => '0' };
     const r = await rt.waitAndroidReady(fake, 1200, () => {});
-    assert(!r.ok && r.stage === 'kernel', `应停在 kernel 阶段：${JSON.stringify(r)}`);
+    assert(!r.ok && r.stage === 'kernel', `应停在 kernel 阶段: ${JSON.stringify(r)}`);
   });
 
-  console.log('\n[provision.js 兼容镜像 / 完整版]');
+  console.log('\n[provision.js Uyumlu imaj / 完整版]');
 
-  await test('playImageInfo 校验 API 34 兼容镜像完整性', async () => {
+  await test('playImageInfo 校验 API 34 Uyumlu imaj完整性', async () => {
     const dir = path.join(TMP, 'apkstart', 'runtime', 'system-images', 'android-34', 'google_apis_playstore', 'x86_64');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'kernel-ranchu'), 'k');
     const prov = new Provisioner(path.join(__dirname, '..'));
     fs.writeFileSync(path.join(dir, 'system.img'), Buffer.alloc(64));
-    assert(!prov.playImageInfo().ok, '过小的镜像不应判定为就绪');
+    assert(!prov.playImageInfo().ok, '过Küçük的镜像不应判定为hazır');
     fs.writeFileSync(path.join(dir, 'system.img'), Buffer.alloc(301 * 1024 * 1024));
     const info = prov.playImageInfo();
-    assert(info.ok && info.api === '34' && info.tag === 'google_apis_playstore', `应判定 API 34 兼容镜像就绪：${JSON.stringify(info)}`);
+    assert(info.ok && info.api === '34' && info.tag === 'google_apis_playstore', `应判定 API 34 Uyumlu imajhazır: ${JSON.stringify(info)}`);
   });
 
   await test('完整版品牌资产与抖音联系入口就位', async () => {
     const root = path.join(__dirname, '..');
-    assert(fs.existsSync(path.join(root, 'src', 'ui', 'assets', 'douyin-qr.jpg')), '缺少抖音二维码图片');
-    assert(fs.existsSync(path.join(root, 'build', 'fetch-runtime.js')), '缺少完整版运行时组装脚本');
+    assert(fs.existsSync(path.join(root, 'src', 'ui', 'assets', 'douyin-qr.jpg')), '缺少Douyin QR kodu图片');
+    assert(fs.existsSync(path.join(root, 'build', 'fetch-runtime.js')), '缺少完整版Çalışma zamanı组装脚本');
     const html = fs.readFileSync(path.join(root, 'src', 'ui', 'index.html'), 'utf8');
-    assert(html.includes('douyin-qr.jpg'), '关于区未引用抖音二维码');
+    assert(html.includes('douyin-qr.jpg'), 'Hakkında区未引用Douyin QR kodu');
     assert(html.includes('https://v.douyin.com/9TIIxVCANig/'), '缺少抖音主页链接');
   });
 
   console.log(results.join('\n'));
-  console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
+  console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
   try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) { /* ignore */ }
   process.exit(failed ? 1 : 0);
 })();

@@ -53,13 +53,13 @@ const base = () => ({
 (() => {
   console.log('\n[驱动 · 校验]');
 
-  test('内置示例都能通过校验（否则用户照抄就错）', () => {
+  test('Yerleşik örnek都能通过校验 (否则用户照抄就错)', () => {
     const dir = path.join(ROOT, 'src', 'drivers');
     const files = fs.readdirSync(dir).filter((n) => n.endsWith('.json'));
-    assert.ok(files.length >= 3, `内置示例只有 ${files.length} 个`);
+    assert.ok(files.length >= 3, `Yerleşik örnek只Toplam ${files.length}`);
     for (const f of files) {
       const r = drivers.validateDriver(readJSON(path.join(dir, f)), { file: f });
-      assert.equal(r.ok, true, `${f}: ${r.errors.join('；')}`);
+      assert.equal(r.ok, true, `${f}: ${r.errors.join('; ')}`);
     }
   });
 
@@ -70,14 +70,14 @@ const base = () => ({
     assert.ok(/format/.test(r.errors.join('')));
   });
 
-  test('id 里带路径穿越 / 空格会被拒（导入时用 id 当文件名）', () => {
+  test('id 里带路径穿越 / 空格会被拒 (导入时用 id 当文件名)', () => {
     for (const id of ['../evil', 'a b', 'x', 'name/../../etc/passwd']) {
       const r = drivers.validateDriver({ ...base(), id });
       assert.equal(r.ok, false, `id=${id} 竟然通过了`);
     }
   });
 
-  test('match 里写错键名会报错，而不是静默不生效', () => {
+  test('match 里写错键名会报错, 而不是静默不生效', () => {
     const r = drivers.validateDriver({ ...base(), match: { gpu: 'amd' } });
     assert.equal(r.ok, false);
     assert.ok(/match\.gpu/.test(r.errors.join('')));
@@ -89,12 +89,12 @@ const base = () => ({
     assert.ok(/effect\.gpu/.test(r.errors.join('')));
   });
 
-  console.log('\n[驱动 · 白名单（不许删数据 / 不许执行代码）]');
+  console.log('\n[驱动 · 白名单 (不许删数据 / 不许执行代码)]');
 
-  test('拒绝 -wipe-data（会清空用户应用与存档）', () => {
+  test('拒绝 -wipe-data (会清空用户Uygulama与存档)', () => {
     const r = drivers.validateDriver({ ...base(), effect: { emulatorArgs: ['-wipe-data'] } });
     assert.equal(r.ok, false);
-    assert.ok(/不允许 -wipe-data/.test(r.errors.join('')), r.errors.join('；'));
+    assert.ok(/izin verilmiyor: -wipe-data/.test(r.errors.join('')), r.errors.join('; '));
   });
 
   test('拒绝 -partition-size / -datadir / -sysdir', () => {
@@ -110,7 +110,7 @@ const base = () => ({
     assert.equal(r.ok, false);
   });
 
-  test('config.ini 只允许白名单键（改数据分区 / 落点的不行）', () => {
+  test('config.ini 只允许白名单键 (改数据分区 / 落点的不行)', () => {
     assert.equal(drivers.validateDriver({ ...base(), effect: { configIni: { 'hw.gpu.mode': 'swangle' } } }).ok, true);
     for (const k of ['disk.dataPartition.size', 'image.sysdir.1', 'hw.ramSize', 'hw.cpu.arch']) {
       const r = drivers.validateDriver({ ...base(), effect: { configIni: { [k]: '1' } } });
@@ -118,7 +118,7 @@ const base = () => ({
     }
   });
 
-  test('config.ini / env 的值不能带换行（防注入新行）', () => {
+  test('config.ini / env 的值不能带换行 (防注入新行)', () => {
     const a = drivers.validateDriver({ ...base(), effect: { configIni: { 'hw.gpu.mode': 'swangle\nhw.ramSize=99999' } } });
     assert.equal(a.ok, false);
     const b = drivers.validateDriver({ ...base(), effect: { env: { ANDROID_X: 'a\nb' } } });
@@ -133,7 +133,7 @@ const base = () => ({
     }
   });
 
-  test('驱动模块里没有 eval / new Function / 动态 require 用户文件', () => {
+  test('驱动模块里没Toplam eval / new Function / 动态 require 用户文件', () => {
     const src = fs.readFileSync(path.join(ROOT, 'src', 'core', 'drivers.js'), 'utf8');
     assert(!/\beval\s*\(/.test(src), '出现了 eval');
     assert(!/new\s+Function\s*\(/.test(src), '出现了 new Function');
@@ -147,7 +147,7 @@ const base = () => ({
     assert.equal(drivers.matchHost({ gpuVendor: ['nvidia'] }, HOST).ok, false);
   });
 
-  test('gpuName 走正则（大小写不敏感）', () => {
+  test('gpuName 走正则 (BüyükKüçük写不敏感)', () => {
     assert.equal(drivers.matchHost({ gpuName: 'radeon\\s+780m' }, HOST).ok, true);
     assert.equal(drivers.matchHost({ gpuName: 'geforce' }, HOST).ok, false);
   });
@@ -160,13 +160,13 @@ const base = () => ({
     assert.equal(drivers.matchHost({ osBuild: { min: 30000 } }, HOST).ok, false);
   });
 
-  test('emulator 版本按数字比，不按字符串比（36.4.9 < 36.4.10）', () => {
+  test('emulator 版本按数字比, 不按字符串比 (36.4.9 < 36.4.10)', () => {
     const host = { ...HOST, emulatorVersion: '36.4.9' };
     assert.equal(drivers.matchHost({ emulatorVersion: { max: '36.4.10' } }, host).ok, true);
     assert.equal(drivers.matchHost({ emulatorVersion: { min: '36.4.10' } }, host).ok, false);
   });
 
-  test('accel 匹配：没有硬件加速的机器只吃 tcg 补丁', () => {
+  test('accel 匹配: 没有donanım hızlandırma的机器只吃 tcg 补丁', () => {
     const noHv = { ...HOST, accel: 'none' };
     assert.equal(drivers.matchHost({ accel: ['none'] }, noHv).ok, true);
     assert.equal(drivers.matchHost({ accel: ['none'] }, HOST).ok, false);
@@ -179,10 +179,10 @@ const base = () => ({
 
   console.log('\n[驱动 · 叠加与开关]');
 
-  test('内置示例默认不生效（enabled:false），用户在界面打开才生效', () => {
+  test('Yerleşik örnek默认不生效 (enabled:false), 用户在界面Aç才生效', () => {
     const d = { ...drivers.validateDriver(readJSON(path.join(ROOT, 'src', 'drivers', 'example-amd-igpu-swangle.json'))).driver };
     const off = drivers.resolve({ drivers: [d], host: HOST });
-    assert.equal(off.applied.length, 0, '内置示例默认就生效了');
+    assert.equal(off.applied.length, 0, 'Yerleşik örnek默认就生效了');
     const on = drivers.resolve({ drivers: [d], host: HOST, state: { [d.id]: true } });
     assert.equal(on.applied.length, 1);
     assert.equal(on.effect.gpuMode, 'swangle');
@@ -194,7 +194,7 @@ const base = () => ({
     assert.equal(r.applied.length, 0);
   });
 
-  test('priority 大的后应用（覆盖前面的 gpuMode / 同名参数）', () => {
+  test('priority Büyük的后Uygulama (覆盖前面的 gpuMode / 同名参数)', () => {
     const a = drivers.validateDriver({ ...base(), id: 'aaa', priority: 0, effect: { gpuMode: 'software', emulatorArgs: ['-gpu=software'] } }).driver;
     const b = drivers.validateDriver({ ...base(), id: 'bbb', priority: 10, effect: { gpuMode: 'swangle', emulatorArgs: ['-gpu=swangle'] } }).driver;
     const r = drivers.resolve({ drivers: [b, a], host: HOST });
@@ -212,7 +212,7 @@ const base = () => ({
     assert.deepEqual(r.effect.env, { ANDROID_AA: '1', ANDROID_BB: '2' });
   });
 
-  test('notes 带上驱动名，界面能说清是谁改的', () => {
+  test('notes 带上驱动名, 界面能说清是谁改的', () => {
     const d = drivers.validateDriver({ ...base(), name: '老显卡补丁', effect: { notes: ['关掉硬件渲染'] } }).driver;
     const r = drivers.resolve({ drivers: [d], host: HOST });
     assert.deepEqual(r.effect.notes, ['老显卡补丁：关掉硬件渲染']);
@@ -220,7 +220,7 @@ const base = () => ({
 
   console.log('\n[驱动 · 读盘 / 导入 / 导出]');
 
-  test('坏文件只记录错误，不影响同目录其它驱动', () => {
+  test('坏文件只记录错误, 不影响同目录其它驱动', () => {
     const dir = tmpDir('load');
     fs.writeFileSync(path.join(dir, 'good.json'), JSON.stringify(base()));
     fs.writeFileSync(path.join(dir, 'bad.json'), '{ not json');
@@ -235,11 +235,11 @@ const base = () => ({
     fs.writeFileSync(path.join(dir, 'big.json'), `{"pad":"${'x'.repeat(300 * 1024)}"}`);
     const r = drivers.loadDir(dir);
     assert.equal(r.drivers.length, 0);
-    assert.ok(/文件过大/.test(JSON.stringify(r.errors)));
+    assert.ok(/Dosya çok büyük/.test(JSON.stringify(r.errors)));
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test('导入：校验通过后按 id 存成 <id>.json（文件名不来自用户输入）', () => {
+  test('导入: 校验通过后按 id 存成 <id>.json (文件名不来自用户yazın)', () => {
     const src = tmpDir('src');
     const dst = tmpDir('dst');
     const f = path.join(src, '随便叫什么.json');
@@ -251,7 +251,7 @@ const base = () => ({
     fs.rmSync(dst, { recursive: true, force: true });
   });
 
-  test('导入：校验失败不落盘', () => {
+  test('导入: 校验失败不落盘', () => {
     const src = tmpDir('src2');
     const dst = tmpDir('dst2');
     const f = path.join(src, 'bad.json');
@@ -266,7 +266,7 @@ const base = () => ({
   test('导出的本机模板本身必须是合法驱动', () => {
     const tpl = drivers.templateFromHost(HOST);
     const r = drivers.validateDriver(tpl);
-    assert.equal(r.ok, true, r.errors.join('；'));
+    assert.equal(r.ok, true, r.errors.join('; '));
     assert.deepEqual(r.driver.match.gpuVendor, ['amd']);
   });
 
@@ -287,7 +287,7 @@ const base = () => ({
     const at = (flag) => args[args.indexOf(flag) + 1];
     assert.equal(at('-gpu'), 'swangle', '驱动没盖住 -gpu');
     assert.equal(at('-accel'), 'off', 'forceTcg 没转成 -accel off');
-    assert.equal(args.filter((a) => a === '-gpu').length, 1, '-gpu 出现两次（驱动里那份没跳过）');
+    assert.equal(args.filter((a) => a === '-gpu').length, 1, '-gpu 出现两次 (驱动里那份没跳过)');
     assert.equal(at('-feature'), 'Vulkan');
     const env = emu.env(ROOT, { accel: 'off' });
     assert.equal(env.ANDROID_EMU_TEST, '1');
@@ -298,6 +298,6 @@ const base = () => ({
     emu._driverEffect = null;
   });
 
-  console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
+  console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
   process.exit(failed ? 1 : 0);
 })();

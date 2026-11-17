@@ -51,14 +51,14 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-hardening-'));
   });
   test('非法包名改写成安全文件名', () => {
     const safe = safeFilePart('../evil');
-    assert.ok(!safe.includes('/') && !safe.includes('\\') && !safe.includes('..'), `改写后必须无路径字符：${safe}`);
+    assert.ok(!safe.includes('/') && !safe.includes('\\') && !safe.includes('..'), `改写后必须无路径字符: ${safe}`);
     assert.equal(safeFilePart('com.ok.pkg'), 'com.ok.pkg');
   });
   test('store 的图标/APK 路径无法逃出数据目录', () => {
     const icon = store.iconPath('../../Windows/System32/drivers/etc/hosts');
     const apk = store.apkPath('../../evil', '../../x');
-    assert.ok(!icon.includes('..'), `图标路径不应含 ..：${icon}`);
-    assert.ok(!apk.includes('..'), `APK 路径不应含 ..：${apk}`);
+    assert.ok(!icon.includes('..'), `图标路径不应含 ..: ${icon}`);
+    assert.ok(!apk.includes('..'), `APK 路径不应含 ..: ${apk}`);
     assert.match(path.basename(apk), /\.apk$/);
   });
 
@@ -83,7 +83,7 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-hardening-'));
   });
 
   console.log('\n[issue #2 P1-1 · _fetchText 不再挂死]');
-  await atest('超上限时 Promise 能结算、不再永不 settle', async () => {
+  await atest('超上限时 Promise 能结算, 不再永不 settle', async () => {
     const srv = http.createServer((_req, res) => {
       res.writeHead(200, { 'Content-Length': String(64 * 1024) });
       res.end(Buffer.alloc(64 * 1024, 0x61));
@@ -96,7 +96,7 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-hardening-'));
         p._fetchText(url, 1024),
         new Promise((_, rej) => setTimeout(() => rej(new Error('_fetchText 卡死未结算')), 5000)),
       ]);
-      assert.equal(out, '', '超限内容必须丢弃，不能把半截当完整');
+      assert.equal(out, '', '超限内容必须丢弃, 不能把半截当完整');
     } finally {
       srv.close();
     }
@@ -107,8 +107,8 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-hardening-'));
     assert.ok(/setTimeout/.test(src), '必须有硬超时兜底');
   });
 
-  console.log('\n[issue #51 · 卸载器识别]');
-  test('electron-builder 的 Uninstall X.exe 能被识别为安装版', () => {
+  console.log('\n[issue #51 · Kaldır器识别]');
+  test('electron-builder için Uninstall X.exe 能被识别为安装版', () => {
     const dir = path.join(TMP, 'uninst-a');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'Uninstall ApkStart.exe'), 'x');
@@ -120,14 +120,14 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-hardening-'));
     fs.writeFileSync(path.join(dir, 'uninstaller.exe'), 'x');
     assert.equal(findUninstaller(dir), 'uninstaller.exe');
   });
-  test('便携版（无卸载器）返回 null', () => {
+  test('便携版 (无Kaldır器)返回 null', () => {
     const dir = path.join(TMP, 'uninst-c');
     fs.mkdirSync(dir, { recursive: true });
     assert.equal(findUninstaller(dir), null);
   });
 
   console.log('\n[issue #98 · 更新不重启死循环]');
-  await atest('已就绪的载荷可被找回续做，版本不符/缺 exe 则不可用', async () => {
+  await atest('hazır的载荷可被找回续做, 版本不符/缺 exe 则不可用', async () => {
     const dataDir = path.join(TMP, 'upd-resume');
     const exe = path.join(dataDir, 'ApkStart.exe');
     fs.mkdirSync(dataDir, { recursive: true });
@@ -137,19 +137,19 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-hardening-'));
     const payload = path.join(dataDir, 'update', '0.5.4', 'payload');
     fs.mkdirSync(payload, { recursive: true });
     fs.writeFileSync(path.join(payload, 'ApkStart.exe'), 'new');
-    assert.equal(u.findResumableJob(), null, '没有就绪标记不应复用');
+    assert.equal(u.findResumableJob(), null, '没有hazır标记不应复用');
     u._markPayloadReady(payload, '0.5.4');
     const job = u.findResumableJob();
     assert.ok(job && job.version === '0.5.4', '应找回 0.5.4 的续做任务');
 
     // 版本比当前旧 → 不复用
     const cur = new Updater({ currentVersion: '0.5.4', exePath: exe, isPackaged: true, dataDir });
-    assert.equal(cur.findResumableJob(), null, '不低于当前版本的载荷不能续做');
+    assert.equal(cur.findResumableJob(), null, '不低于Geçerli sürüm的载荷不能续做');
     // 标记版本不符 → 不复用
     fs.writeFileSync(u._readyFile(payload), JSON.stringify({ version: '0.5.2' }));
     assert.equal(u.findResumableJob(), null, '标记版本不符不能复用');
   });
-  test('apply 脚本用字节数校验替换成功，且保留失败载荷、有双路径重启', () => {
+  test('apply 脚本用字节数校验替换成功, 且保留失败载荷, 有双路径重启', () => {
     const dataDir = path.join(TMP, 'upd-apply');
     const exe = path.join(dataDir, 'ApkStart.exe');
     fs.mkdirSync(dataDir, { recursive: true });
@@ -164,10 +164,10 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-hardening-'));
     assert.ok(/Start-Process -FilePath/.test(script) && /cmd\.exe/.test(script), '重启必须有兜底路径');
   });
 
-  console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
+  console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
   fs.rmSync(TMP, { recursive: true, force: true });
   process.exit(failed ? 1 : 0);
 })().catch((e) => {
-  console.error('  异常：', e.stack || e.message);
+  console.error('  异常: ', e.stack || e.message);
   process.exit(1);
 });

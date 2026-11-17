@@ -28,13 +28,13 @@ const GB = 1024 * 1024 * 1024;
 (() => {
   console.log('\n[资源分配 · 宿主能力]');
 
-  test('hostProfile 接受注入值（测试环境不碰真机）', () => {
+  test('hostProfile 接受注入值 (测试环境不碰真机)', () => {
     const h = hostProfile({ totalMB: 32768, cores: 16 });
     assert.equal(h.totalMB, 32768);
     assert.equal(h.cores, 16);
   });
 
-  test('hostProfile 没给值时不会返回 0 核 / NaN', () => {
+  test('hostProfile 没给值时不会返回 0 çekirdek / NaN', () => {
     const h = hostProfile({});
     assert.ok(h.cores >= 1);
     assert.ok(Number.isFinite(h.totalMB));
@@ -42,7 +42,7 @@ const GB = 1024 * 1024 * 1024;
 
   test('内存上限给宿主留 25%', () => {
     const lim = memoryLimits(32768);
-    assert.equal(lim.maxMB, 24576, `32GB 宿主最多分 24GB，实际 ${lim.maxMB}`);
+    assert.equal(lim.maxMB, 24576, `32GB 宿主最多分 24GB, 实际 ${lim.maxMB}`);
     assert.equal(lim.stepMB, 512);
     assert.equal(lim.minMB, 1024);
   });
@@ -54,7 +54,7 @@ const GB = 1024 * 1024 * 1024;
 
   console.log('\n[资源分配 · 内存收敛]');
 
-  test('0 表示自动，原样返回 0', () => {
+  test('0 表示Otomatik, 原样返回 0', () => {
     const r = clampMemoryMB(0, 32768);
     assert.equal(r.mb, 0);
     assert.equal(r.reason, 'auto');
@@ -70,7 +70,7 @@ const GB = 1024 * 1024 * 1024;
     const r = clampMemoryMB(64 * 1024, 32768);
     assert.equal(r.mb, 24576);
     assert.equal(r.capped, true);
-    assert.ok(/最多只能分 24 GB/.test(r.reason), r.reason);
+    assert.ok(/en fazla ayrılabilir: 24 GB/.test(r.reason), r.reason);
   });
 
   test('填 128MB 被抬到最低可启动值', () => {
@@ -79,7 +79,7 @@ const GB = 1024 * 1024 * 1024;
     assert.equal(r.capped, true);
   });
 
-  test('小内存机器（4GB）不会给出 4GB 全给安卓', () => {
+  test('Küçük内存机器 (4GB)不会给出 4GB 全给安卓', () => {
     const r = clampMemoryMB(4096, 4096);
     assert.equal(r.mb, 3072);
   });
@@ -94,7 +94,7 @@ const GB = 1024 * 1024 * 1024;
     assert.equal(clampCores(8, 1).cores, 1);
   });
 
-  test('0 = 自动', () => {
+  test('0 = Otomatik', () => {
     assert.equal(clampCores(0, 8).cores, 0);
   });
 
@@ -103,7 +103,7 @@ const GB = 1024 * 1024 * 1024;
   test('分得太满会提示 Windows 换页', () => {
     const v = memVerdict(28672, 32768);
     assert.equal(v.level, 'insufficient');
-    assert.ok(/换页/.test(v.note), v.note);
+    assert.ok(/takaslama/.test(v.note), v.note);
   });
 
   test('正常区间不打扰用户', () => {
@@ -126,11 +126,11 @@ const GB = 1024 * 1024 * 1024;
     assert.equal(diskLimits(100 * 1024).maxGB, 80);
   });
 
-  test('磁盘只剩 20GB 时不允许填 64GB 分区', () => {
+  test('Diskte yalnızca 20GB 时不允许填 64GB 分区', () => {
     const r = clampDataGB(64, 20 * 1024);
     assert.equal(r.gb, 16);
     assert.equal(r.capped, true);
-    assert.ok(/只剩 20\.0 GB/.test(r.reason), r.reason);
+    assert.ok(/yalnızca 20\.0 GB/.test(r.reason), r.reason);
   });
 
   test('磁盘充足时 64GB 分区放行', () => {
@@ -143,7 +143,7 @@ const GB = 1024 * 1024 * 1024;
     const v = storageVerdict(30 * 1024, 50 * GB);
     assert.equal(v.ok, false);
     assert.ok(v.shortMB > 0);
-    assert.ok(/还差/.test(v.note), v.note);
+    assert.ok(/eksik:/.test(v.note), v.note);
   });
 
   test('读不到磁盘剩余时跳过预检而不是拦死', () => {
@@ -158,11 +158,11 @@ const GB = 1024 * 1024 * 1024;
     assert.equal(v.message, '');
   });
 
-  test('diskVerdict 空间不够时给出差多少（提示运行时所在磁盘）', () => {
+  test('diskVerdict 空间不够时给出差多少 (提示Çalışma zamanı所在磁盘)', () => {
     const v = diskVerdict(10 * 1024, 60 * 1024);
     assert.equal(v.ok, false);
-    assert.ok(/磁盘空间不足/.test(v.message), v.message);
-    assert.ok(/ApkStart 运行时所在磁盘/.test(v.message), v.message);
+    assert.ok(/Disk alanı yetersiz/.test(v.message), v.message);
+    assert.ok(/çalışma zamanı diski/.test(v.message), v.message);
   });
 
   test('diskVerdict 读不到剩余空间时不拦', () => {
@@ -183,25 +183,25 @@ const GB = 1024 * 1024 * 1024;
 
   const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
   test('主进程收敛越界值并暴露资源总览', () => {
-    assert(/sanitizeResourcePatch/.test(mainSrc), '保存设置时未收敛资源值');
+    assert(/sanitizeResourcePatch/.test(mainSrc), '保存Ayarlar时未收敛资源值');
     assert(/engine:resources/.test(mainSrc), '缺少 engine:resources IPC');
     assert(/runtime:resetAndResize/.test(mainSrc), '缺少重置+按新容量重建的通道');
     assert(!/mumuMemoryGB|mumuCores/.test(mainSrc), '主进程仍残留第三方底座的内存收敛逻辑');
   });
 
   const emulatorSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'emulator.js'), 'utf8');
-  test('quickboot 差量盘挡住就地扩容时如实报错，不假成功', () => {
+  test('quickboot 差量盘挡住就地扩容时如实报错, 不假成功', () => {
     assert(/_hasDataOverlay/.test(emulatorSrc), '未检测 qcow2 差量盘');
-    assert(/needsReset: true/.test(emulatorSrc), '扩容失败未标记 needsReset');
-    assert(/fsGB/.test(emulatorSrc), 'dataInfo 未暴露文件系统实际大小');
+    assert(/needsReset: true/.test(emulatorSrc), 'Büyütme başarısız未标记 needsReset');
+    assert(/fsGB/.test(emulatorSrc), 'dataInfo 未暴露文件系统实际BüyükKüçük');
   });
 
   const doctorSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'doctor.js'), 'utf8');
-  test('自动档位里的内存/核心上限跟着宿主走，不再写死 8GB/8核', () => {
+  test('Otomatik档位里的内存/核心上限跟着宿主走, 不再写死 8GB/8核', () => {
     assert(/memoryLimits\(host\.totalMB\)/.test(doctorSrc), 'doctor 未按宿主收敛内存');
     assert(!/1536, 8192/.test(doctorSrc), 'doctor 仍在写死 8192 上限');
   });
 
-  console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
+  console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
   process.exit(failed ? 1 : 0);
 })();

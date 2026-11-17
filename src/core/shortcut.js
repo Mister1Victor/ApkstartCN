@@ -137,6 +137,57 @@ async function iconToIco(raw, { decode, onFallback } = {}) {
 }
 
 /**
+ * 快捷方式的扩展名：Windows 是 .lnk，Linux（FydeOS / ChromeOS 的 Linux 子系统、
+ * 各种发行版）是 .desktop（freedesktop 规范）。
+ */
+function shortcutExt() {
+  return process.platform === 'win32' ? '.lnk' : '.desktop';
+}
+
+/**
+ * 写一个 freedesktop .desktop 启动项。
+ *
+ * 和 Windows 的 .lnk 差别很大，几个必须注意的点：
+ *  - Exec 里的路径带空格要加双引号，且 .desktop 规范里 `%` 是字段码，必须转义成 `%%`；
+ *  - 文件必须 chmod +x，否则很多桌面环境会当成文档而不是启动器；
+ *  - 图标只能用 PNG/SVG 的绝对路径，ICO 在 Linux 上无效。
+ *
+ * @param {object} opt { shortcutPath, target, args, iconPngPath, description }
+ */
+function writeDesktopEntry(opt) {
+  const dir = path.dirname(opt.shortcutPath);
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  } catch (e) {
+    throw new Error(`快捷方式目录不可写：${dir}（${e.message}）`);
+  }
+  const quote = (s) => `"${String(s).replace(/(["\\$`])/g, '\\$1').replace(/%/g, '%%')}"`;
+  // args 是按 shell 习惯拼好的字符串，这里拆成单个参数再各自加引号
+  const argv = String(opt.args || '').match(/"[^"]*"|\S+/g) || [];
+  const execLine = [quote(opt.target), ...argv.map((a) => quote(a.replace(/^"|"$/g, '')))].join(' ');
+  const icon = opt.iconPngPath && fs.existsSync(opt.iconPngPath) ? opt.iconPngPath : '';
+  const body = [
+    '[Desktop Entry]',
+    'Type=Application',
+    'Version=1.0',
+    `Name=${String(opt.description || 'Android App').replace(/\n/g, ' ')}`,
+    `Exec=${execLine}`,
+    icon ? `Icon=${icon}` : '',
+    'Terminal=false',
+    'Categories=Application;',
+    'StartupNotify=true',
+    'X-GNOME-Autostart-enabled=true',
+    '',
+  ].filter((l) => l !== '').join('\n');
+  fs.writeFileSync(opt.shortcutPath, body, { encoding: 'utf8', mode: 0o755 });
+  try { fs.chmodSync(opt.shortcutPath, 0o755); } catch (_) { /* 某些文件系统不支持，忽略 */ }
+  if (!fs.existsSync(opt.shortcutPath)) {
+    throw new Error(`快捷方式未落盘：${opt.shortcutPath}`);
+  }
+  return opt.shortcutPath;
+}
+
+/**
  * 生成桌面快捷方式
  *
  * writeShortcutLink 返回 true 并不代表文件真的落盘了：安全软件拦截、
@@ -146,6 +197,16 @@ async function iconToIco(raw, { decode, onFallback } = {}) {
  * @param {object} opt { shortcutPath, target, args, iconIcoPath, description, cwd }
  */
 function writeShortcut(opt) {
+  // Linux / FydeOS：走 .desktop，不用 Windows 的 COM 接口
+  if (process.platform !== 'win32') {
+    return writeDesktopEntry({
+      shortcutPath: opt.shortcutPath,
+      target: opt.target,
+      args: opt.args,
+      iconPngPath: opt.iconPngPath || '',
+      description: opt.description,
+    });
+  }
   const { shell } = require('electron');
   const dir = path.dirname(opt.shortcutPath);
   try {
@@ -183,5 +244,5 @@ function removeShortcut(p) {
 
 module.exports = {
   pngToIco, pngBytesToIco, iconToIco,
-  writeShortcut, removeShortcut, safeFileName, ICO_SIZES,
+  writeShortcut, writeDesktopEntry, removeShortcut, safeFileName, shortcutExt, ICO_SIZES,
 };

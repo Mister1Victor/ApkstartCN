@@ -156,8 +156,58 @@ function describeSession(state, plan) {
     ? `，已停掉 ${plan.stopped.length} 个后台应用` : ''}`;
 }
 
+/**
+ * 多窗口（B 方案）下的会话状态机。
+ *
+ * 与单窗口的 nextSessionState 不同：这里允许 active 里有多个应用，并且要区分
+ * 「前台正在看的」和「后台挂着的」。后台应用是内存大头，所以引入墓碑策略：
+ *   - foreground：当前有画面窗口、用户正在交互的那个；
+ *   - background：仍算"打开"但没有窗口的，超过宽限期后应被 force-stop（墓碑化），
+ *     下次点开走热启动恢复，代价只是重新加载一次页面，不丢登录态/数据。
+ *
+ * @param {string[]} active        当前所有活跃应用包名
+ * @param {string} foreground      当前前台包（可为 null）
+ * @returns {{foreground:string|null, background:string[], count:number}}
+ */
+function sessionRoles(active = [], foreground = null) {
+  const set = (active || []).filter(Boolean);
+  const fg = foreground && set.includes(foreground) ? foreground : (set.length ? set[set.length - 1] : null);
+  return {
+    foreground: fg,
+    background: set.filter((p) => p !== fg),
+    count: set.length,
+  };
+}
+
+/**
+ * 决定哪些后台应用该被墓碑化（force-stop 回收内存）。
+ *
+ * 规则（保守，宁可少杀也别误伤正在用的）：
+ *   - 只处理 background，绝不动 foreground；
+ *   - 系统包 / NEVER_TRIM 一律跳过；
+ *   - 保留最近 N 个后台（默认 1）以便快速切回不掉登录态，其余墓碑化；
+ *   - tombstoneLimit<=0 表示「不留后台」，全部墓碑化（最省内存）。
+ *
+ * @param {object} o { background, installedSystem?, keepRecent?, tombstone? }
+ * @returns {{tombstone:string[], keep:string[]}}
+ */
+function planTombstones({ background = [], keepRecent = 1 } = {}) {
+  const bg = (background || []).filter((p) => p && !isSystemPackage(p) && !NEVER_TRIM.includes(p));
+  // background 末尾是最近的，保留最后 keepRecent 个，其余进墓碑
+  const keepCount = Math.max(0, Number(keepRecent) || 0);
+  const keep = bg.slice(Math.max(0, bg.length - keepCount));
+  const tombstone = bg.filter((p) => !keep.includes(p));
+  return { tombstone, keep };
+}
+
+/** 生成墓碑命令：force-stop 指定后台包，回收其内存但保留数据/登录态 */
+function buildTombstoneCommands(pkgs = []) {
+  return pkgs.filter((p) => SAFE_PKG.test(String(p))).map((p) => `am force-stop ${p}`);
+}
+
 module.exports = {
   NEVER_TRIM, OPTIONAL_SYSTEM, SYSTEM_PREFIXES,
   isSystemPackage, buildSessionCommands, buildIdleCommands,
   buildRestoreCommands, nextSessionState, describeSession,
+  sessionRoles, planTombstones, buildTombstoneCommands,
 };

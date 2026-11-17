@@ -16,6 +16,7 @@ const path = require('path');
 const store = require('./store');
 const { Provisioner } = require('./provision');
 const doctor = require('./doctor');
+const drivers = require('./drivers');
 const userdata = require('./userdata');
 
 const AVD_NAME = 'apkstart';
@@ -56,6 +57,12 @@ class EmulatorEngine {
     this.attempts = [];
     this.lastDiagnosis = null;
     this.lastExitCode = null;
+    /**
+     * 本次开机生效的驱动（兼容补丁）效果，以及命中的驱动清单。
+     * 由 start() 里的 _resolveDrivers() 填；buildArgs / env / ensureAvd 只读它。
+     */
+    this._driverEffect = null;
+    this._driversApplied = [];
     // 快照的 ram.bin ≈ 分配给虚拟机的内存（2-4GB）。
     // 冷启动本来就快的机器不该为它付出几个 GB 的磁盘，只在「真慢」时才保存。
     this.snapshotWorthSaving = null;
@@ -197,6 +204,29 @@ class EmulatorEngine {
    * 下一次启动就会 FATAL "Running multiple emulators with the same AVD"。
    * 按「AVD 锁里的 pid」+「命令行带本 AVD 名的 qemu/emulator」两个来源清。
    */
+  /**
+   * 当前 AVD 面板是横的还是竖的。
+   *
+   * 为什么要问这个：横屏**只能靠物理面板**实现 —— `wm size` 只改逻辑分辨率，画面会
+   * 躺倒 90°；`adb emu rotate` 只转内容，系统里还是竖屏。真正生效的是
+   * `hw.lcd.width/height` 互换 + 重启。而 config.ini 是每次开机时按当时的设置写的，
+   * 所以读它就知道**现在跑着的这台**是什么方向。
+   *
+   * @returns {boolean|null} true=横屏面板，false=竖屏面板，null=读不到
+   */
+  panelLandscape() {
+    try {
+      const avdDir = path.join(this.provisioner.paths().avdHome, `${AVD_NAME}.avd`);
+      const cfg = fs.readFileSync(path.join(avdDir, 'config.ini'), 'utf8');
+      const w = Number((/^hw\.lcd\.width=(\d+)$/m.exec(cfg) || [])[1]);
+      const h = Number((/^hw\.lcd\.height=(\d+)$/m.exec(cfg) || [])[1]);
+      if (!w || !h) return null;
+      return w > h;
+    } catch (_) {
+      return null;
+    }
+  }
+
   async killOrphanProcesses({ onLog = () => {} } = {}) {
     if (process.platform !== 'win32') return 0;
     const avdDir = path.join(this.provisioner.paths().avdHome, `${AVD_NAME}.avd`);
@@ -268,6 +298,90 @@ class EmulatorEngine {
       if (await probe(port)) return true;
     }
     return false;
+  }
+
+  /**
+   * 给界面/诊断用的驱动报告：这次开机用了哪些、跳过了哪些、为什么。
+   * @returns {{ applied:Array, effect:object|null, errors:Array, host:object|null }}
+   */
+  driverReport() {
+    const pick = (d) => ({
+      id: d.id, name: d.name, version: d.version, author: d.author || '',
+      description: d.description || '', priority: d.priority, hits: d.hits || [],
+      dir: d.dir || '', file: d.file || '',
+    });
+    return {
+      applied: (this._driversApplied || []).map(pick),
+      effect: this._driverEffect ? {
+        gpuMode: this._driverEffect.gpuMode,
+        forceTcg: this._driverEffect.forceTcg,
+        notes: this._driverEffect.notes || [],
+        ini: this._driverEffect.ini || {},
+        env: this._driverEffect.env || {},
+        args: (this._driverEffect.args || []).map((a) => (a.value ? `${a.flag}=${a.value}` : a.flag)),
+      } : null,
+      errors: this._driverErrors || [],
+      host: this._driverHost || null,
+    };
+  }
+
+  /**
+   * 把驱动声明的 config.ini 覆盖项套到默认配置上。
+   * 已存在的键就地替换（不产生重复行），不存在的追加在后面。
+   * 只处理 drivers.js 白名单里的键，非法键在校验阶段就被拒了。
+   */
+  _iniWithDrivers(text) {
+    const over = (this._driverEffect && this._driverEffect.ini) || {};
+    const keys = Object.keys(over);
+    if (!keys.length) return text;
+    const seen = new Set();
+    const out = String(text).split('\n').map((line) => {
+      const m = /^([A-Za-z0-9_.]+)=/.exec(line);
+      if (!m || !(m[1] in over)) return line;
+      seen.add(m[1]);
+      return `${m[1]}=${over[m[1]]}`;
+    });
+    for (const k of keys) if (!seen.has(k)) out.push(`${k}=${over[k]}`);
+    return out.join('\n');
+  }
+
+  /**
+   * 读一遍驱动目录，挑出匹配这台机器的，存成本次开机的效果。
+   *
+   * 目录顺序即优先级：内置示例（只读，默认 enabled:false）在前，用户驱动在后，
+   * 同 id 时用户目录覆盖内置 —— 用户改了示例就能直接生效，不用改安装目录。
+   *
+   * @returns {{ applied:Array, skipped:Array, errors:Array } | null}
+   */
+  _resolveDrivers({ accel, emulatorVersion }) {
+    const s = this.settings || {};
+    const disabled = (s.drivers && s.drivers.disabled) || [];
+    const state = (s.drivers && s.drivers.state) || {};
+    let gpuName = '';
+    let osBuild = 0;
+    try {
+      const release = require('os').release() || '';
+      const m = /(\d+)\s*$/.exec(release);
+      osBuild = m ? Number(m[1]) : 0;
+    } catch (_) { /* 拿不到就当 0，匹配条件里带 osBuild 的驱动不会生效 */ }
+    const host = drivers.hostContext({
+      info: { ...doctor.hostInfo(), cpuVendor: (require('os').cpus() || [])[0]?.model || '' },
+      gpuVendor: doctor.detectGpuVendor(),
+      gpuName,
+      osBuild,
+      accel: accel && accel.ok ? (accel.kind || 'whpx') : 'none',
+      emulatorVersion,
+    });
+    const loaded = drivers.loadAll([
+      drivers.bundledDir(this.appRoot),
+      drivers.userDir(store),
+    ]);
+    const r = drivers.resolve({ drivers: loaded.drivers, host, disabled, state });
+    this._driverEffect = r.effect;
+    this._driversApplied = r.applied;
+    this._driverErrors = loaded.errors;
+    this._driverHost = host;
+    return { ...r, errors: loaded.errors, host };
   }
 
   /**
@@ -360,6 +474,13 @@ class EmulatorEngine {
       'hw.gpu.enabled=yes',
       `hw.gpu.mode=${gpu}`,
       'hw.keyboard=yes',
+      // 虚拟 Wi-Fi 必须显式打开。API 34 的 Play Store 镜像上网走的是
+      // wlan0（netsim 虚拟网卡），不是早期的 eth0。config.ini 里少了这一行，
+      // 模拟器就不会给 wlan0 建链路——表现是 wlan0 一直 NO-CARRIER、
+      // `dumpsys connectivity` 显示 Active default network: none，应用里就是
+      // 一直「网络错误，请稍后再试」。命令行的 -netdelay/-netspeed/-dns-server
+      // 都只是 QEMU 用户态 NAT 的参数，跟 guest 内部的网卡有没有被拉起来无关。
+      'hw.wifi=yes',
       'hw.lcd.width=' + screen.w,
       'hw.lcd.height=' + screen.h,
       'hw.lcd.density=' + screen.dpi,
@@ -378,7 +499,7 @@ class EmulatorEngine {
       // wm density（改 smallestWidth），不需要也不允许传感器参与。
       'hw.sensors.orientation=no',
     ].join('\n') + '\n';
-    fs.writeFileSync(cfgPath, cfg);
+    fs.writeFileSync(cfgPath, this._iniWithDrivers(cfg));
 
     // /data 分区必须先「真的能用」，否则后面一切都是白等（见 ensureDataPartition 注释）
     const data = this.ensureDataPartition(avdDir, dataMB);
@@ -493,7 +614,19 @@ class EmulatorEngine {
       ANDROID_ADB_SERVER_PORT: adbPort,
       ANDROID_EMULATOR_USE_SYSTEM_LIBS: '',
       ...(plan.accel === 'off' ? { ANDROID_I_WANT_MY_TCG: 'yes' } : {}),
+      // 驱动声明的环境变量：只放行 ANDROID_/QEMU_/LIBGL_/MESA_/EMUGL_ 前缀（见 drivers.js）
+      ...((this._driverEffect && this._driverEffect.env) || {}),
     };
+  }
+
+  /**
+   * 要注入的系统语言。默认简体中文；用户可在设置里改（engine.locale），
+   * 设成 'en-US' 或 'off' 就回到镜像原生英文。
+   */
+  _guestLocale() {
+    const v = String(this.settings?.engine?.locale || 'zh-CN').trim();
+    if (!v || v === 'off' || /^false$/i.test(v)) return '';
+    return v;
   }
 
   buildArgs({
@@ -501,11 +634,16 @@ class EmulatorEngine {
     gpu = 'software', memoryMB = 2048, cores = 2,
     snapshot = true, wipe = false, lcd = null,
   } = {}) {
+    // 驱动可以固定渲染后端 / 强制软件模拟。放在最前面算进 gpu/accel，
+    // 这样后面所有逻辑（-accel off、config.ini 的 hw.gpu.mode）都跟着它走。
+    const eff = this._driverEffect || null;
+    const drvGpu = eff ? drivers.gpuModeToArg(eff.gpuMode) : '';
+    if (drvGpu) gpu = drvGpu;
+    if (eff && eff.forceTcg) accel = 'off';
     const args = [
       '-avd', AVD_NAME,
       '-port', String(port),
-      // 音频：默认开启（让安卓应用的提示音/视频声音能放出来）。
-      // 仅当用户在设置里显式关闭时才传 -no-audio 省一点 CPU。
+      // 音频：默认开启（让安卓应用的提示音/视频声音能放出来）。      // 仅当用户在设置里显式关闭时才传 -no-audio 省一点 CPU。
       ...(this.settings?.engine?.audio === false ? ['-no-audio'] : []),
       '-no-boot-anim',
       '-no-metrics',
@@ -525,6 +663,14 @@ class EmulatorEngine {
     // 显式声明不限速：默认值虽然是 full，但某些 -gpu / -net 组合下会被带上
     // 模拟器的保守配置，视频类应用（红果、抖音）首屏就会明显慢半拍。
     args.push('-netdelay', 'none', '-netspeed', 'full');
+    // 系统语言：默认简体中文。
+    // 实测 `-prop persist.sys.locale=zh-CN` 完全无效 —— 模拟器会拦截 persist.sys.*
+    // 这类受保护属性，ro.product.locale 又被镜像 build.prop 覆盖；guest 里 getprop
+    // 一个都看不到。官方专门给了 -change-locale：它会真正改系统语言并重启 framework，
+    // 且会写进 /data，从快照恢复也能保留。
+    // 用户可在设置里改成其它 locale 或关掉（engine.locale='off'）。
+    const locale = this._guestLocale();
+    if (locale) args.push('-change-locale', locale);
     // DNS：安卓默认用 10.0.2.3（转发到主机 DNS）。主机走 VPN / 公司网 / 某些运营商
     // 时，一次解析能拖到几百毫秒，表现为「页面转圈半天才开始加载」。给一份国内公共
     // DNS 作为首选，失败时系统仍会回退。用户可在设置里关掉（内网域名场景）。
@@ -571,6 +717,13 @@ class EmulatorEngine {
     }
     if (wipe) args.push('-wipe-data');
     if (accel === 'off') args.push('-accel', 'off');
+    // 驱动声明的其它参数：-gpu / -accel 已经由上面的 gpu/accel 统一处理，这里跳过，
+    // 避免同一个参数出现两次（emulator 对重复参数的行为在不同版本上不一致）。
+    for (const a of ((eff && eff.args) || [])) {
+      if (a.flag === '-gpu' || a.flag === '-accel') continue;
+      if (a.value === '') args.push(a.flag);
+      else args.push(a.flag, a.value);
+    }
     return args;
   }
 
@@ -651,22 +804,68 @@ class EmulatorEngine {
     const img = path.join(dir, 'userdata-qemu.img');
     let bytes = 0;
     try { bytes = fs.statSync(img).size; } catch (_) { /* 还没建 */ }
+    let fsBytesNow = 0;
+    try { fsBytesNow = userdata.fsBytes(img); } catch (_) { /* 还没建或损坏 */ }
+    const configuredGB = Number(this.settings?.engine?.dataPartitionGB || 0);
+    const fsGB = fsBytesNow ? Number((fsBytesNow / 1073741824).toFixed(1)) : 0;
     return {
       avdDir: dir,
       imageBytes: bytes,
       imageGB: bytes ? Number((bytes / 1073741824).toFixed(1)) : 0,
-      configuredGB: Number(this.settings?.engine?.dataPartitionGB || 0),
+      // 文件系统实际大小（≠ 镜像文件大小）：扩了镜像但 resize2fs 没到位时这两个数会不一样
+      fsGB,
+      configuredGB,
+      // 用户设了目标、但文件系统还没长到目标
+      pendingGB: configuredGB && fsGB ? Math.max(0, configuredGB - fsGB) : 0,
+      // quickboot 会给 userdata 建一层 qcow2 覆盖层，guest 看到的是它，不是底座镜像
+      overlay: this._hasDataOverlay(img),
     };
+  }
+
+  /** userdata 是否被 quickboot 的 qcow2 覆盖层接管（有它就只能重置，不能就地扩容） */
+  _hasDataOverlay(img) {
+    try { return fs.existsSync(`${img}.qcow2`); } catch (_) { return false; }
   }
 
   /**
    * 立即把 /data 分区扩容到指定大小（必须保证模拟器已停止，否则镜像被占用）。
-   * 走的是 ensureDataPartition 的就地扩容路径：qemu-img resize + resize2fs，
-   * 不重建、不丢已装应用与存档。
+   *
+   * 两种路径，取舍是实测出来的：
+   *  - 没有 quickboot 覆盖层：就地扩（qemu-img resize + resize2fs），不丢已装应用；
+   *  - 有覆盖层：guest 真正挂载的是 `userdata-qemu.img.qcow2`，底座扩到 8GB、
+   *    文件系统也长到 8GB，guest 里 `df /data` 依旧是 5.7GB（覆盖层还是旧大小），
+   *    而覆盖层里的文件系统没有 root 权限改不了。这种时候必须如实返回「需要重置」，
+   *    不能再像以前那样返回成功 —— 用户会以为扩好了，装 50GB 游戏依旧半路失败。
    */
   resizeDataPartition(dataMB) {
     const dir = path.join(this.provisioner.paths().avdHome, `${AVD_NAME}.avd`);
-    return this.ensureDataPartition(dir, dataMB);
+    const img = path.join(dir, 'userdata-qemu.img');
+    const wantGB = Math.max(1, Math.round(Number(dataMB || 0) / 1024));
+    if (this._hasDataOverlay(img)) {
+      return {
+        ok: false,
+        needsReset: true,
+        fsGB: this.dataInfo().fsGB,
+        error: `安卓正在用快速启动的差量盘，就地扩容改不到它（目标 ${wantGB} GB）。`
+          + '需要「重置安卓数据」后按新容量重建 /data —— 已装应用和存档会被清空，请先确认。',
+      };
+    }
+    const r = this.ensureDataPartition(dir, dataMB);
+    // ensureDataPartition 在 resize2fs 失败时会返回 ok:false；再核一次文件系统大小，
+    // 防止「文件撑开了、文件系统没长」被当成功（用户看到的就是装游戏说空间不足）。
+    let fsAfter = 0;
+    try { fsAfter = userdata.fsBytes(img); } catch (_) { /* ignore */ }
+    const wantBytes = Math.max(1024, Math.round(Number(dataMB || 0))) * 1048576;
+    if (r && r.ok && fsAfter < wantBytes * 0.95) {
+      return {
+        ok: false,
+        ...r,
+        fsGB: Number((fsAfter / 1073741824).toFixed(1)),
+        error: `镜像已扩到 ${wantGB} GB，但文件系统只到 ${(fsAfter / 1073741824).toFixed(1)} GB（resize2fs 没成功）。`
+          + '可以再点一次「立即扩容」，或清理磁盘后重试。',
+      };
+    }
+    return r;
   }
 
   /**
@@ -804,7 +1003,8 @@ class EmulatorEngine {
   async checkNetwork(adbPath = '', { waitMs = 0, interval = 3000 } = {}) {
     const fs = require('fs');
     const path = require('path');
-    let adb = adbPath || '';
+    // 同 repairWifi：防住「把函数当路径传进来」这种调用错误
+    let adb = typeof adbPath === 'function' ? adbPath() : (adbPath || '');
     if (!adb) {
       try { adb = this.provisioner.adbVersionPath() || ''; } catch (_) { adb = ''; }
     }
@@ -855,7 +1055,111 @@ class EmulatorEngine {
     }
     const ip = ips[0];
     const gw = /^10\.0\.2\./.test(ip) ? '10.0.2.2' : ip.replace(/\.\d+$/, '.1');
-    return { ok: true, reason: '', gateway: gw, ip, wifiConnected: connected };
+    // 有 IP 不等于能上网。实测拿到 10.0.2.16 但 DNS/路由被掐时，应用首页还是
+    // 「网络错误」，而上层却以为网络正常。这里补一次真实 HTTP 探测。
+    // 用 nc 直连 80 端口而不是 ping：QEMU 用户态 NAT 会拦 ICMP，ping 必然误报。
+    // 只在「等待网络就绪」那条路径（waitMs>0）上做，快速轮询跳过——否则每 3 秒
+    // 就要花 4 秒探测，反而把启动拖慢。结论放进 reachable，不改 ok：有 IP 就先
+    // 让应用起来，一次 DNS 抖动不该卡住整个启动。
+    let reachable = null;
+    if (waitMs > 0) {
+      const probe = await sh(
+        "echo -e 'GET /generate_204 HTTP/1.0\\r\\nHost: connect.rom.miui.com\\r\\n\\r\\n' "
+        + "| nc -w 4 connect.rom.miui.com 80 2>/dev/null | head -1",
+        7000,
+      );
+      reachable = /HTTP\/1\.[01]\s+204/.test(probe);
+    }
+    return { ok: true, reason: '', gateway: gw, ip, wifiConnected: connected, reachable };
+  }
+
+  /**
+   * 把「已保存但不会自动连」的 AndroidWifi 主动连上。
+   *
+   * 这是实机踩出来的：模拟器自带的虚拟热点 AndroidWifi 在配置库里可能落成
+   * 两条记录（open + owe），系统据此判定为
+   *   「Saved / Won't automatically connect」
+   * 于是开机后 wlan0 永远 NO-CARRIER，应用里一直报网络错误。
+   *
+   * 麻烦的是 shell（uid 2000）没有 NETWORK_SETTINGS 权限，
+   * `cmd wifi connect-network` 会直接抛 SecurityException，所以不能走命令行。
+   * 这里改为拉起 Wi-Fi 设置页、点一下那条已保存的网络——和用户手动点的效果一样。
+   *
+   * @returns {Promise<boolean>} 是否已连上
+   */
+  async repairWifi(adbPath = '') {
+    const fs = require('fs');
+    const path = require('path');
+    // 防御：调用方可能误把函数本身传进来（rt.adbPath 是个方法）。
+    let adb = typeof adbPath === 'function' ? adbPath() : (adbPath || '');
+    if (!adb) {
+      try { adb = path.join(this.locate().root, 'platform-tools', 'adb.exe'); } catch (_) { adb = ''; }
+    }
+    if (!adb || !fs.existsSync(adb)) adb = 'adb';
+    const port = Number(process.env.ANDROID_ADB_SERVER_PORT) || this.adbPort || 5044;
+    const env = { ...process.env, ANDROID_ADB_SERVER_PORT: String(port) };
+    const sh = (cmd, timeout = 10000) => new Promise((resolve) => {
+      try {
+        execFile(adb, ['-s', this.serial, 'shell', cmd], { timeout, windowsHide: true, env }, (e, out) => {
+          resolve(e ? '' : String(out || ''));
+        });
+      } catch (_) { resolve(''); }
+    });
+    // 连上之后顺手把「联网验证」的探测地址换成国内可达的。
+    // 安卓默认拿 connectifitycheck.gstatic.com 判断「是否真能上网」，国内连不上它，
+    // 系统就一直给网络打「!」标记（已连接但无法访问互联网）。部分应用会因此
+    // 自我判定为离线、拒绝加载内容。换成一个返回 204 的国内端点即可。
+    const tune = async () => {
+      await sh('settings put global captive_portal_http_url http://connect.rom.miui.com/generate_204');
+      await sh('settings put global captive_portal_https_url https://connect.rom.miui.com/generate_204');
+      await sh('settings put global captive_portal_mode 0');
+    };
+    // 已经连上就别折腾了
+    if (/Wifi is connected/i.test(await sh('cmd wifi status'))) {
+      await tune();
+      return true;
+    }
+    // 开关被关掉时（用户手滑 / 之前 -svc wifi disable）先打开
+    await sh('svc wifi enable');
+    await new Promise((r) => setTimeout(r, 1500));
+
+    // 打开 Wi-Fi 设置页，用 uiautomator 找到 AndroidWifi 那一行再点它。
+    // 比按坐标点稳：不同分辨率 / 语言下坐标都不一样。
+    await sh('am start -a android.settings.WIFI_SETTINGS');
+    await new Promise((r) => setTimeout(r, 2500));
+    await sh('uiautomator dump /sdcard/ui.xml');
+    const xml = await new Promise((resolve) => {
+      try {
+        execFile(adb, ['-s', this.serial, 'shell', 'cat', '/sdcard/ui.xml'],
+          { timeout: 10000, windowsHide: true, env, maxBuffer: 8 * 1024 * 1024 },
+          (e, out) => resolve(e ? '' : String(out || '')));
+      } catch (_) { resolve(''); }
+    });
+    // 节点形如 <node text="AndroidWifi" ... bounds="[x1,y1][x2,y2]" />
+    const re = /<node[^>]*\btext="([^"]*)"[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/g;
+    let m = re.exec(xml);
+    while (m) {
+      const label = m[1];
+      if (/AndroidWifi/i.test(label)) {
+        const cx = Math.round((Number(m[2]) + Number(m[4])) / 2);
+        const cy = Math.round((Number(m[3]) + Number(m[5])) / 2);
+        await sh(`input tap ${cx} ${cy}`);
+        await new Promise((r) => setTimeout(r, 6000));
+        if (/Wifi is connected/i.test(await sh('cmd wifi status'))) {
+          await tune();
+          return true;
+        }
+      }
+      m = re.exec(xml);
+    }
+    // 兜底：直接重连一次看看（有些版本 dump 里没有 text，只有 content-desc）
+    await sh('svc wifi disable');
+    await new Promise((r) => setTimeout(r, 1500));
+    await sh('svc wifi enable');
+    await new Promise((r) => setTimeout(r, 6000));
+    const ok = /Wifi is connected/i.test(await sh('cmd wifi status'));
+    if (ok) await tune();
+    return ok;
   }
 
   /**
@@ -864,7 +1168,17 @@ class EmulatorEngine {
    */
   async start({ headless = false, onLog = () => {}, probe = null, maxAttempts = 4 } = {}) {
     if (this.proc && !this.proc.killed) {
-      return { ok: true, reused: true, serial: this.serial, port: this.port };
+      // 关键：emulator.exe 只是启动器，spawn 完 qemu 自己就退出了，而这个 proc
+      // 对象会一直留着（killed 仍是 false）。只看它会把「已经关掉的机器」当成
+      // 还活着 —— 重启换面板后紧接着 ensure() 就踩过这个坑：start() 直接返回
+      // reused，调用方拿着一个已经死掉的 serial 去 adb，报 `device not found`，
+      // 表现就是「切换应用到另一个方向的 App 直接失败」。
+      // 所以必须再确认控制台端口上真的有机器在跑，才算复用。
+      if (await this._consoleAlive()) {
+        return { ok: true, reused: true, serial: this.serial, port: this.port };
+      }
+      onLog('上一次的模拟器已经退出，重新开机…');
+      this.proc = null;
     }
 
     const loc = this.locate();
@@ -916,13 +1230,45 @@ class EmulatorEngine {
     const emuVersion = verInfo.version || '';
     this._emuVersion = emuVersion;
 
+    // 驱动（兼容补丁）：先看清这台机器是什么样，再看有没有人给它写过补丁。
+    // 这一步只读 JSON，不执行任何代码；匹配不上就是空效果，行为和以前完全一致。
+    let drv = { applied: [], skipped: [], errors: [], effect: null };
+    try {
+      drv = this._resolveDrivers({ accel: accelInfo, emulatorVersion: emuVersion });
+    } catch (e) {
+      this.log(`驱动加载失败：${e.message}`);
+      onLog(`驱动加载失败（已忽略，按默认参数启动）：${e.message}`);
+    }
+    if (drv.applied.length) {
+      onLog(`已应用驱动：${drv.applied.map((d) => `${d.name} v${d.version}`).join('、')}`);
+      for (const n of (this._driverEffect.notes || []).slice(0, 4)) onLog(`· ${n}`);
+    } else {
+      onLog('未匹配到任何驱动，按默认参数启动');
+    }
+    if (drv.errors && drv.errors.length) {
+      onLog(`有 ${drv.errors.length} 个驱动文件没加载成功（设置 → 驱动 里能看到原因）`);
+    }
+
     // 与设置页 / 诊断报告共用同一个入口，保证「显示的」就是「实跑的」
     const profile = doctor.autoProfile({
       settings: s, accel: accelInfo, emulatorVersion: emuVersion, diskMB,
       port: startPort, adbPort,
     });
     this.profile = profile;
-    const variants = doctor.planVariants(profile).slice(0, maxAttempts);
+    let variants = doctor.planVariants(profile).slice(0, maxAttempts);
+    // 驱动指定了渲染后端 / 要求软件模拟时，每一轮都按它来：
+    // 用户装驱动的目的就是「这台机器只能用这一档」，继续先试崩过的后端只会白等。
+    if (drv.applied.length && this._driverEffect) {
+      const gpuFixed = drivers.gpuModeToArg(this._driverEffect.gpuMode);
+      if (gpuFixed) {
+        variants = variants.map((v) => ({ ...v, gpu: gpuFixed }));
+        onLog(`驱动把渲染后端固定为 ${gpuFixed}`);
+      }
+      if (this._driverEffect.forceTcg) {
+        variants = variants.map((v) => ({ ...v, accel: 'off', label: `${v.gpu} / 驱动要求软件模拟` }));
+        onLog('驱动要求关闭硬件加速（走软件模拟）');
+      }
+    }
 
     // 记住「上次拉起就崩」的 GPU 后端，下次把它排到最后。
     // 实测：AMD Radeon 780M 上 `-gpu host` 能通过 emulator 自己的硬件检查，
@@ -942,6 +1288,7 @@ class EmulatorEngine {
     const logFile = path.join(store.DATA_DIR, 'logs', 'emulator.log');
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     this._logWrite(logFile, `\n\n=== ${new Date().toISOString()} START ${doctor.describeProfile(profile)} ===\n`);
+    this._logWrite(logFile, `drivers: ${drv.applied.length ? drv.applied.map((d) => `${d.id}@${d.version}`).join(', ') : '(none)'}\n`);
 
     // 屏幕规格在整个启动过程中保持一致，否则每次重试都换分辨率会狂清快照。
     // 分辨率来自 doctor 的 profile（设置里可改「画质」），auto 时按加速状态选。
@@ -1071,11 +1418,20 @@ class EmulatorEngine {
         onLog(`运行时就绪（${Math.round(bootMs / 1000)}s，${plan.label}）`);
         // 开机成功不等于能用：顺手体检网络。虚拟机没网时，需要联网的页面会一直黑屏，
         // 用户只会说「这个应用黑屏」，很难联想到是网络。这里主动查一次并说清楚。
+        //
+        // 但不能「查一次就下结论」：Wi-Fi 关联 + DHCP 普遍比 sys.boot_completed 晚
+        // 5~20 秒，以前这里只调 checkNetwork() 一次，于是**每次冷启动**都会打一条
+        // 「⚠ 没有网络，请重置安卓数据」，而 5 秒后网络就绪了 —— 用户照着做就会
+        // 丢光已装应用。现在给它 12 秒等待窗口（就绪即返回），真超时才提示，
+        // 而且不再建议破坏性操作。
         let network = null;
-        try { network = await this.checkNetwork(); } catch (_) { /* 体检失败不算启动失败 */ }
+        try {
+          network = await this.checkNetwork('', { waitMs: 12000, interval: 3000 });
+        } catch (_) { /* 体检失败不算启动失败 */ }
         if (network && !network.ok) {
-          onLog('⚠ 安卓虚拟机当前没有网络：需要联网的应用（如红果、短剧类）打开后会一直黑屏。'
-            + '可在「设置 → 修复网络」重置安卓数据来修（应用清单会保留，点开时会自动重装）。');
+          onLog('⚠ 安卓虚拟机暂时没连上网（Wi-Fi 未关联或没拿到地址）。'
+            + '需要联网的应用打开后可能一直黑屏：稍后重开应用即可；'
+            + '若持续无网，可在「设置 → 修复网络」重连（不会删除已装应用）。');
         }
         return {
           ok: true, serial: this.serial, port, accel: accelInfo, logFile,
@@ -1089,7 +1445,9 @@ class EmulatorEngine {
       this.lastDiagnosis = d;
       lastError = fatal ? `${d.title}：${d.hint}` : '开机超时（可能是首次引导较慢或硬件加速未生效）';
       onLog(`${lastError}，自动换一组参数重试…`);
-      this._noteGpuFailure(plan);
+      // 授权对话框卡住不是渲染后端的问题，别把当前 GPU 记进「启动即崩」黑名单，
+      // 否则下次启动会无缘无故跳过用户机器本来能用的后端。
+      if (d.code !== 'ADB_UNAUTHORIZED') this._noteGpuFailure(plan);
       // eslint-disable-next-line no-await-in-loop
       await this.killAttempt();
     }
@@ -1176,11 +1534,18 @@ class EmulatorEngine {
     }
     this.cancelSnapshotSave();
     const serial = this.serial;
-    if (adbPath && this.snapshotWorthSaving !== false) {
-      // 关机前补存一次：空闲路径没来得及存（比如用户装完应用马上退出）时，
-      // 下一次开机仍然能走快照恢复，而不是重新冷启动。
+    // 关机前先判断 guest 是否健康，只在这一次判断里问一遍 adb：
+    //  - 健康 → 补存一次快照（空闲路径没来得及存时，下次仍能秒进）；
+    //  - 不健康（adb 卡在 unauthorized / 没开机完成）→ 不存，并且**在退出后作废快照**：
+    //    `adb emu kill` 会让 emulator 自己按 quickboot 存一份内存状态，那份同样会
+    //    冻结未授权状态。不在这里清掉，下次恢复又是一份「开机必超时」的毒快照。
+    const healthy = adbPath ? await this._adbGuestHealthy(adbPath) : false;
+    if (adbPath && this.snapshotWorthSaving !== false && healthy) {
       // 3GB 内存写盘要几秒到二十几秒，超时给足，别让快照写一半就被 kill 掉。
       await this._saveViaAdb(adbPath, { timeout: 60000 });
+    }
+    if (!healthy && this.snapshotWorthSaving !== false) {
+      this.log('关机时 guest 未授权/未就绪：将作废快照，下次冷启动重新注入调试授权');
     }
     if (adbPath) {
       await new Promise((resolve) => {
@@ -1198,6 +1563,14 @@ class EmulatorEngine {
       await sleep(300);
     }
     await this.killAttempt();
+    // 关干净了就把启动器句柄丢掉。留着它会让 running() 永远返回 true、
+    // start() 以为还能复用（见 start() 里的注释）。
+    this.proc = null;
+    // 进程已退出，这时再作废它可能在退出时自动存的毒快照。顺序很重要：必须放在
+    // emu kill + 端口关闭之后，否则它会把刚删的快照又写回来。
+    if (!healthy && this.snapshotWorthSaving !== false) {
+      try { this.invalidateSnapshot(); } catch (_) { /* ignore */ }
+    }
     return true;
   }
 
@@ -1230,8 +1603,35 @@ class EmulatorEngine {
     });
   }
 
-  /** 用 adb 触发一次快照保存（失败返回 false，调用方决定要不要再试） */
-  _saveViaAdb(adbPath, { timeout = 45000 } = {}) {
+  /**
+   * guest 是否处于「可以安全存快照」的健康状态：adb authorized + boot 完成。
+   * 冷启动时若「允许 USB 调试吗？」对话框还挂着，state 是 unauthorized —— 这时存下
+   * 内存 + 磁盘，guest 里就没有 host 的 adbkey.pub，下次恢复还是 unauthorized，
+   * 每轮探测的 shell 都抛异常，干等 240s 还被误诊成显卡/虚拟化问题。
+   */
+  async _adbGuestHealthy(adbPath) {
+    if (!adbPath) return false;
+    try {
+      const { AdbClient } = require('./adb');
+      const probe = new AdbClient({ adbPath, serial: this.serial });
+      const state = await probe.deviceState();
+      const out = await probe.shell('getprop sys.boot_completed', { timeout: 6000 }).catch(() => '');
+      return state === 'device' && String(out).trim() === '1';
+    } catch (_) {
+      return false; // 读不到就按不健康处理
+    }
+  }
+
+  /**
+   * 用 adb 触发一次快照保存（失败返回 false，调用方决定要不要再试）。
+   * 只有 guest 健康时才存，宁可下次冷启动 20 多秒，也不能存一份「开机必失败」的毒快照。
+   */
+  async _saveViaAdb(adbPath, { timeout = 45000 } = {}) {
+    if (!adbPath) return false;
+    if (!(await this._adbGuestHealthy(adbPath))) {
+      this.log('跳过快照保存：guest 未授权或未开机完成（避免存入未授权的毒快照）');
+      return false;
+    }
     return new Promise((resolve) => {
       execFile(adbPath, ['-s', this.serial, 'emu', 'avd', 'snapshot', 'save', SNAPSHOT_NAME],
         { timeout, windowsHide: true }, (err) => resolve(!err));

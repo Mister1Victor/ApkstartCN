@@ -8,14 +8,32 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const store = require('./store');
 
+/**
+ * 平板排版的逻辑密度。
+ * 720 宽 ÷ (190/160) = 606dp ≥ 600dp，正好越过 Android 的平板断点；
+ * 320dpi（镜像默认）只有 360dp，是手机排版。
+ */
+const TABLET_DENSITY = 190;
+function tabletDensity() {
+  try {
+    return (store.getSettings().display || {}).tabletMode !== false ? String(TABLET_DENSITY) : 'reset';
+  } catch (_) {
+    return String(TABLET_DENSITY);
+  }
+}
+
+/**
+ * 系统里可能存在的 adb 位置。**故意只列 Android SDK 与常见手动安装目录**：
+ * 第三方模拟器自带的 adb（MuMu / 雷电 / 蓝叠）不在这里 —— 用它们的 adb 会连带
+ * 继承别人的 server 状态（端口、授权、offline 抖动），与「独立运行」冲突。
+ * 自己那份 adb 在运行时目录里，优先级永远最高（见 engine.adbPath）。
+ */
 const COMMON_ADB_PATHS = [
   path.join(process.env.LOCALAPPDATA || '', 'Android', 'Sdk', 'platform-tools', 'adb.exe'),
-  'C:\\Android\\platform-tools\\adb.exe',
-  'C:\\adb\\adb.exe',
-  'C:\\LDPlayer\\LDPlayer9\\adb.exe',
-  'C:\\Program Files\\Netease\\MuMuPlayer-12.0\\shell\\adb.exe',
-  'C:\\Program Files\\BlueStacks_nxt\\HD-Adb.exe',
+  'C:/Android/platform-tools/adb.exe',
+  'C:/adb/adb.exe',
 ];
 
 /**
@@ -78,6 +96,36 @@ function friendlyLaunchError(raw, pkg) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 解析 `adb devices` 里某个 serial 的 state 列。
+ * 关键：unauthorized 的设备在 `get-state` 里也会回报 'device'，只有 devices 列表的
+ * state 列能区分 authorized / unauthorized / offline —— 开机探测据此快速自愈。
+ */
+function parseDeviceState(text, serial) {
+  const lines = String(text || '').split(/\r?\n/).slice(1);
+  for (const line of lines) {
+    const m = /^(\S+)\s+(unauthorized|offline|recovery|sideload|no\s+permissions|device)\b/i.exec(line.trim());
+    if (!m) continue;
+    if (serial && m[1] !== serial) continue;
+    const st = m[2].toLowerCase().replace(/\s+/g, '');
+    if (st === 'device') return 'device';
+    if (st === 'unauthorized' || st === 'nopermissions') return 'unauthorized';
+    return st; // offline / recovery / sideload
+  }
+  return 'no-device';
+}
+
+/** 从「允许 USB 调试」对话框未确认导致的 shell 报错里识别出 unauthorized */
+function isUnauthorizedError(raw) {
+  return /\bunauthorized\b|no permissions|confirm.*(allow|debug)/i.test(String(raw || ''));
+}
+
+/** 从 `pm path <pkg>` 的输出里取出每个 APK 的真实路径 */
+function parsePmPaths(text) {
+  return String(text || '').split(/\r?\n/).map((l) => l.trim())
+    .filter((l) => /^package:/.test(l)).map((l) => l.slice(8).trim()).filter(Boolean);
+}
 
 /** 已解析过的启动入口（adbPath|pkg → activity），10 分钟有效 */
 const LAUNCHER_CACHE = new Map();
@@ -193,7 +241,18 @@ class AdbClient {
   }
 
   _adbEnv() {
-    return { ...process.env, ANDROID_ADB_SERVER_PORT: process.env.ANDROID_ADB_SERVER_PORT || '5044' };
+    const env = { ...process.env, ANDROID_ADB_SERVER_PORT: process.env.ANDROID_ADB_SERVER_PORT || '5044' };
+    // Play 商店镜像会强制 ADB 授权：host 的 adb server 与 guest 的 adbd 必须用同一把
+    // adbkey。官方做法是 adb/emulator 共用 %USERPROFILE%\.android\adbkey{,.pub}，
+    // emulator 启动时把 adbkey.pub 烤进 guest 的 /data/misc/adb/adb_keys。
+    // 显式告诉 adb server 去哪里找公钥：某些环境 ANDROID_SDK_HOME / 绿色版运行时
+    // 会让 adb 在别处找 key，于是每次冷启动都弹「允许 USB 调试」→ device unauthorized。
+    if (!env.ADB_VENDOR_KEYS) {
+      const home = process.env.USERPROFILE || process.env.HOME || '';
+      const keyDir = path.join(home, '.android');
+      try { if (home && fs.existsSync(keyDir)) env.ADB_VENDOR_KEYS = keyDir; } catch (_) { /* ignore */ }
+    }
+    return env;
   }
 
   exec(args, { timeout = 30000, withSerial = true, binary = false } = {}) {
@@ -348,6 +407,20 @@ class AdbClient {
     }
   }
 
+  /**
+   * 读取本 serial 在 `adb devices` 里的真实状态：device / unauthorized / offline / no-device。
+   * isOnline() 用的 get-state 无法区分 authorized 与 unauthorized（两者都是 'device'），
+   * 开机探测靠这个方法来识别「授权对话框卡住」并快速自愈。
+   */
+  async deviceState() {
+    try {
+      const { stdout } = await this.exec(['devices'], { withSerial: false, timeout: 8000 });
+      return parseDeviceState(stdout, this.serial);
+    } catch (_) {
+      return 'no-device';
+    }
+  }
+
   async devices() {
     const { stdout } = await this.exec(['devices', '-l'], { withSerial: false });
     return stdout.split('\n').slice(1)
@@ -468,9 +541,24 @@ class AdbClient {
     }
   }
 
+  /**
+   * 是否真的装好了 —— 不轻信 PackageManager 的一句话。
+   *
+   * 快照与数据分区不一致时，`pm path` 会因 packages.xml 里还留着记录而返回
+   * `package:/data/app/.../base.apk`（installed=true），但那个 APK 文件其实已经被
+   * 回滚掉了。继续 `am start` 只会失败。所以用 `test -f/-s` 逐个核对 pm 报出来的
+   * 路径，文件不在（或空文件）就判定为「未真正安装」，交给上层自动重装。
+   *
+   * @returns {Promise<boolean>}
+   */
   async isInstalled(pkg) {
     const out = await this.shell(`pm path ${pkg}`);
-    return /package:/.test(out);
+    const paths = parsePmPaths(out);
+    if (!paths.length) return false;
+    // 分片 APK 全部要在；任一片丢了都启动不了。合并成一条 shell，省一次 adb 往返。
+    const checks = paths.map((p) => `[ -s "${p}" ]`).join(' && ');
+    const probe = await this.shell(`${checks} && echo __APKSTART_PRESENT__`, { timeout: 10000 }).catch(() => '');
+    return /__APKSTART_PRESENT__/.test(String(probe));
   }
 
   async listPackages() {
@@ -788,6 +876,14 @@ class AdbClient {
       'settings put global transition_animation_scale 0',
       'settings put global animator_duration_scale 0',
       'settings put system screen_off_timeout 2147483647',
+      // 联网验证：安卓默认拿 connectivitycheck.gstatic.com 判断「是否真能上网」，
+      // 国内连不上它，系统就一直给网络打「!」标记（已连接但无法访问互联网），
+      // 部分应用据此自我判定离线、拒绝加载内容。换成国内返回 204 的端点。
+      // 每次启动都写一次（幂等、单条 shell 里，几乎零成本），这样即使从旧快照
+      // 恢复、或用户手动改过系统设置，也能自动纠正回来。
+      'settings put global captive_portal_http_url http://connect.rom.miui.com/generate_204',
+      'settings put global captive_portal_https_url https://connect.rom.miui.com/generate_204',
+      'settings put global captive_portal_mode 0',
       // 注意：这里不要再写 wm user-rotation / accelerometer_rotation。
       // 方向由 setOrientation / resetDisplayOverrides 按当前横竖屏状态统一定，
       // 在这里写死 lock 0 会把横屏方向覆盖回竖屏（画面躺倒）。
@@ -825,13 +921,24 @@ class AdbClient {
    */
   async setOrientation(landscape) {
     try {
-      // 自动旋转必须关掉（否则传感器会乱转），但 user_rotation 要按目标方向锁：
-      // 物理面板换成 1280x720 之后，只有把 user-rotation 锁成 1（90°），
-      // Android 才会按横屏方向排版 —— 否则它仍按 rotation 0 渲染竖内容，
-      // Qt 贴进横窗口就变成「躺倒 90°」。
+      // 自动旋转必须关掉（否则传感器会乱转）。
       await this.shell('settings put system accelerometer_rotation 0; wm size reset', { timeout: 15000 });
-      await this.shell(`wm user-rotation lock ${landscape ? 1 : 0}`, { timeout: 15000 });
-      await this.shell(landscape ? 'wm density 190' : 'wm density reset', { timeout: 15000 });
+      // 方向锁 **0**（不是 1）。物理面板的方向已经由 hw.lcd.width/height 决定
+      // （见 doctor.lcdFor），这里再锁 1 等于把横面板又转成竖逻辑空间，
+      // 结果就是画面躺倒 90° —— 这正是「横屏没弄好」的直接原因。
+      await this.shell('wm user-rotation lock 0', { timeout: 15000 });
+      // 关键一步：红果这类应用自己声明了 portrait，系统会照办，于是
+      // init=1280x720 的横面板被转成 cur=720x1280 的竖逻辑空间，画面又躺下。
+      // 打开「忽略应用的屏幕方向请求」，系统才会按面板方向排版。
+      // 竖屏模式下必须显式关掉，否则上一次横屏留下的 true 会让竖屏面板里
+      // 显示横屏排版。API < 31 没有这个命令，失败忽略即可。
+      await this.shell(`wm set-ignore-orientation-request ${landscape ? 'true' : 'false'}`, { timeout: 15000 });
+      // 打开 freeform / 忽略方向请求后，安卓会弹一次「See and do more」的引导框
+      // （"Double-tap outside an app to reposition it…"）。它盖在应用上面，
+      // 用户以为程序坏了。这里预先把它标记为已确认，再兜底按一次返回。
+      await this.shell('settings put secure freeform_mode_confirmations confirmed', { timeout: 10000 });
+      if (landscape) await this.shell('input keyevent KEYCODE_BACK', { timeout: 8000 });
+      await this.shell(`wm density ${tabletDensity()}`, { timeout: 15000 });
       return true;
     } catch (_) {
       return false;
@@ -841,13 +948,97 @@ class AdbClient {
   /** 启动时清掉旧版本残留的 wm size / density 覆盖（持久化在 /data，会一直躺倒） */
   async resetDisplayOverrides(landscape = false) {
     try {
-      await this.shell('wm size reset; wm density reset', { timeout: 15000 });
+      // density 必须**在应用启动之前**就设好。
+      // 之前这里无条件 `wm density reset`，然后由 _healOrientation（应用起来
+      // 1.8 秒后 / 每 60 秒巡检）补回 190 —— 那是一次「应用运行中」的配置变更。
+      // 缓存了 DisplayMetrics 的应用（墨读就是）会按旧密度算一遍 dp，画面缩成
+      // 左上角一小块、右边一大片空白，也就是用户说的「墨读没有填满窗口」。
+      // 现在在这里连同 size 一起重设，启动路径上不再有中途改密度。
+      await this.shell(`wm size reset; wm density ${tabletDensity()}`, { timeout: 15000 });
       await this.shell('settings put system accelerometer_rotation 0', { timeout: 15000 });
-      await this.shell(`wm user-rotation lock ${landscape ? 1 : 0}`, { timeout: 15000 });
+      // 与 setOrientation 保持一致：面板方向说了算，逻辑方向锁 0。
+      await this.shell('wm user-rotation lock 0', { timeout: 15000 });
+      await this.shell(`wm set-ignore-orientation-request ${landscape ? 'true' : 'false'}`, { timeout: 15000 });
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  /**
+   * 保证 guest 里有一套能打中文的输入法。
+   *
+   * 系统镜像（Google Play 版）只带 LatinIME（英文键盘），Gboard 的中文语言包又要
+   * 联网下载、在模拟器里极不可靠。所以随包带一个 AOSP 谷歌拼音输入法
+   * （assets/PinyinIME.apk，含 x86_64 原生库），开机后静默装好并启用。
+   *
+   * 幂等：已安装就跳过，用户手动换掉默认输入法后不强行改回去。
+   *
+   * @param {string} apkPath PinyinIME.apk 的绝对路径
+   * @param {object} [o] { setDefault } 是否设为默认输入法（默认 true）
+   * @returns {Promise<{ok:boolean, installed?:boolean, ime?:string, reason?:string}>}
+   */
+  async ensureChineseIme(apkPath, { setDefault = true } = {}) {
+    const IME_PKG = 'com.android.inputmethod.pinyin';
+    const IME_ID = IME_PKG + '/.PinyinIME';
+    // 组件名写死但校验存在：ime list -s 只列**已启用**的输入法，用它判断
+    // 「装没装」会在刚安装完时误判为「服务未注册」，于是永远走不到 ime enable。
+    // 正确做法是用 pkg 是否已安装来判断，组件名用 ime list -a 交叉确认。
+    const pkgInstalled = async () => {
+      const out = await this.shell(`pm list packages ${IME_PKG}`, { timeout: 10000 }).catch(() => '');
+      return String(out).indexOf('package:' + IME_PKG) >= 0;
+    };
+    const findEnabledIme = async () => {
+      const out = await this.shell('ime list -s', { timeout: 10000 }).catch(() => '');
+      return String(out).split('\n').map((s) => s.trim()).find((s) => s.indexOf(IME_PKG) === 0) || '';
+    };
+    try {
+      let installed = await pkgInstalled();
+      let justInstalled = false;
+      if (!installed) {
+        if (!apkPath || !fs.existsSync(apkPath)) {
+          return { ok: false, reason: '输入法 APK 缺失' };
+        }
+        await this.install(apkPath);
+        installed = true;
+        justInstalled = true;
+        // 装完等包管理器扫到这个包
+        for (let i = 0; i < 6; i += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          installed = await pkgInstalled();
+          if (installed) break;
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 800));
+        }
+      }
+      if (!installed) return { ok: false, justInstalled, reason: '输入法包未注册' };
+      // 启用 + 设为默认（secure settings 可写，不需要 root）。
+      // 每次都执行：从旧快照恢复时 enabled 标记可能丢失，或用户手动换过默认输入法。
+      const cmds = [`ime enable ${IME_ID}`];
+      if (setDefault) cmds.push(`settings put secure default_input_method ${IME_ID}`);
+      await this.shell(cmds.join(' ; '), { timeout: 12000 }).catch(() => '');
+      const ime = await findEnabledIme();
+      return { ok: !!ime, installed: justInstalled, ime: ime || IME_ID };
+    } catch (e) {
+      return { ok: false, reason: e.message };
+    }
+  }
+
+  /**
+   * 保证系统语言是简体中文。
+   * persist.sys.locale 是 SELinux 保护的只读属性，运行时改不了（会报
+   * "Failed to set property"），真正生效靠 emulator 启动时的 -prop 注入。
+   * 这里做的是能做的部分：把应用级 locale 和时区设好，让界面立刻中文、时间正确。
+   */
+  async ensureChineseLocale(locale = 'zh-CN') {
+    const cmds = [
+      'settings put system system_locales ' + locale,
+      'setprop persist.sys.timezone Asia/Shanghai',
+      // 24 小时制 + 中文常见的日期格式
+      'settings put system time_12_24 24',
+    ];
+    await this.shell(cmds.join(' ; '), { timeout: 12000 }).catch(() => '');
+    return true;
   }
 
   /** 当前逻辑分辨率（横屏切换后窗口要按它算宽高比） */
@@ -893,5 +1084,5 @@ class AdbClient {
 
 module.exports = {
   AdbClient, AdbError, parseStatList, friendlyInstallError, friendlyLaunchError,
-  componentArg, parseResolvedActivity,
+  componentArg, parseResolvedActivity, parseDeviceState, isUnauthorizedError, parsePmPaths,
 };

@@ -1,13 +1,34 @@
 'use strict';
 /**
  * 本地持久化：应用清单 + 设置
- * 数据目录：%APPDATA%\apkstart
+ * 数据目录：%APPDATA%\apkstart（MSIX/商店版见下面的 STORE_BUILD 说明）
  */
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { safeFilePart } = require('./pkgname');
 
-const DATA_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'apkstart');
+/**
+ * 是不是 Microsoft Store（MSIX / APPX）打包版？
+ *
+ * MSIX 的 full-trust 应用会把 `%APPDATA%` / `%LOCALAPPDATA%` 下的**写入**
+ * 重定向到 `%LOCALAPPDATA%\Packages\<PackageFamilyName>\LocalCache\...`，
+ * 但环境变量和 API 返回的仍然是被重定向前的「真路径」。这会造成两类事故：
+ *   1. 我们从 %APPDATA%\apkstart 里 spawn 出来的 emulator/adb/qemu 若没有包身份，
+ *      按真路径去找文件会「文件不存在」；
+ *   2. 用户点「打开数据目录」看到的是空目录。
+ * 所以商店版直接把数据目录放到 AppData **之外**（%USERPROFILE%\ApkStart），
+ * 完全不进虚拟化范围，父子进程看到的是同一份真实文件。
+ *
+ * process.windowsStore 由 Electron 在 MSIX/APPX 环境下注入（普通 node 下是 undefined）。
+ */
+const STORE_BUILD = (() => {
+  try { return !!require('electron').app?.isPackaged && !!process.windowsStore; } catch (_) { return false; }
+})();
+
+const DATA_DIR = STORE_BUILD
+  ? path.join(os.homedir(), 'ApkStart', 'data')
+  : path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'apkstart');
 const ICON_DIR = path.join(DATA_DIR, 'icons');
 const APK_DIR = path.join(DATA_DIR, 'apks');
 const APPS_FILE = path.join(DATA_DIR, 'apps.json');
@@ -17,8 +38,15 @@ const DEFAULT_SETTINGS = {
   language: 'auto',
   adbPath: '',
   device: '127.0.0.1:5555',
+  /**
+   * 驱动（兼容补丁）扩展：用户自己写的 JSON 补丁放在数据目录的 drivers/ 下。
+   * 这里只记「被用户关掉的 id」——默认全开，坏了能一键关，不用删文件。
+   */
+  drivers: { state: {}, disabled: [] },
   engine: {
-    mode: 'builtin',         // builtin（自带运行时，默认） | attach（连接已有运行时，高级）
+    // 只有一个运行时：自带运行时（builtin）。字段保留是为了兼容老 settings.json 的合并，
+    // 读设置时会被强制写回 'builtin'（见 getSettings 的迁移）。
+    mode: 'builtin',
     qemuPath: '',
     systemImage: '',
     memoryMB: 0,             // 0 = 由 doctor 按机器内存自动决定
@@ -49,6 +77,13 @@ const DEFAULT_SETTINGS = {
     // 网络加速：给模拟器指定国内公共 DNS。安卓默认的 10.0.2.3 要走主机 DNS，
     // VPN / 公司网 / 某些运营商下解析会拖到几百毫秒，视频类应用首屏会明显发卡。
     fastDns: true,
+    // 系统语言：开机时由 emulator -prop 注入（guest 里 setprop 会被 SELinux 拒绝）。
+    // 默认简体中文。设成 en-US 或 off 就回到镜像原生英文。
+    locale: 'zh-CN',
+    // 中文输入法：随包带 AOSP 谷歌拼音输入法，开机后静默安装并启用。
+    // 系统镜像只带 LatinIME（英文键盘），不装就打不了中文。
+    chineseIme: true,
+    chineseImeDefault: true,
     // 快照：quickboot 内存快照让二次启动只要几秒，代价是磁盘上多一份约 2~3GB 的
     // ram.bin。磁盘紧张时可以关掉（只影响启动速度，不影响应用数据）。
     keepSnapshot: true,
@@ -65,6 +100,16 @@ const DEFAULT_SETTINGS = {
     // 预热：启动 ApkStart 后在后台把安卓环境引导好，第一次点应用几乎不用等。
     // 代价是常驻约 1GB 内存（和 WSA / 应用宝电脑版一样的取舍），可随时关掉。
     prewarm: true,
+    // 多窗口（B 方案）：允许同时打开多个应用、各自独立窗口。默认关闭，
+    // 保持「开新停旧」的单窗口行为；开启后靠墓碑机制回收后台，资源可控。
+    multiWindow: false,
+    // 多窗口时保留最近几个后台应用不墓碑化（便于秒切回、不掉登录态）。
+    // 0 = 最省内存（只留前台），默认 1。
+    keepBackground: 1,
+    // 按键映射（游戏键盘→触屏）：默认开启，用户可在设置里关
+    keymapEnabled: true,
+    // 每应用的按键映射表：{ "com.example.game": [{key:'w',action:'tap',x:0.15,y:0.75}, ...] }
+    keymaps: {},
   },
   runtime: {
     dir: '',                 // 空 = %APPDATA%\apkstart\runtime
@@ -78,6 +123,7 @@ const DEFAULT_SETTINGS = {
     emulatorUrl: '',         // 手动指定 emulator 包地址（空 = 自动从 SDK 索引解析最新版）
     sysimgUrl: '',           // 手动指定系统镜像包地址
     compatImage: false,      // ARM 兼容模式：改用 Google Play 镜像（内置 native bridge，可装 ARM-only 应用）
+    deployFailedAt: 0,       // 上次自动部署失败的时间戳（0=无失败）。失败后 30 分钟内不再自动重下
     // 轻量版的运行时整包：默认从本项目 GitHub Release 下载（与「软件更新」同源），
     // 拿不到时自动退回 dl.google.com 分组件下载。可在这里换成自建镜像地址。
     preferGithubRuntime: true,
@@ -121,6 +167,20 @@ const DEFAULT_SETTINGS = {
     // 横屏 = 把 AVD 物理面板换成 1280x720 并重启（唯一能得到正立+铺满的方式）。
     // 持久化在这里，重启 ApkStart 后仍按这个方向开机。
     landscape: false,
+    // 屏幕方向策略：
+    //   auto      = 按应用自己声明的方向自动换物理面板（推荐，只有这样画面才能铺满窗口）
+    //   landscape = 强制横屏面板
+    //   portrait  = 强制竖屏面板
+    // 上面的 landscape 字段在 auto 模式下退化成「当前面板实际方向」这个事实，
+    // 由 restartForOrientation 写入，不再当偏好去覆盖应用自己的方向。
+    orientationMode: 'auto',
+    // 平板排版：把 guest 的逻辑密度覆盖成 190dpi（720 宽 → sw606dp ≥ 600dp，
+    // 越过 Android 的平板断点）。红果短剧这类应用只有在平板排版下才有双列剧集页，
+    // 也是用户要的「平板模式」。关掉就回到镜像默认密度（手机排版）。
+    tabletMode: true,
+    // 窗口模式：true=把安卓画面嵌进 ApkStart 自己的窗口（观感统一）；
+    // false=让模拟器开自己的原生窗口（绕开嵌入固有的黑边/坐标错位/铺不满问题）。
+    windowEmbed: true,
   },
 };
 
@@ -184,9 +244,22 @@ function resourcePreset(mode) {
 
 const store = {
   DATA_DIR, ICON_DIR, APK_DIR,
+  // 商店（MSIX）打包版标记：main.js 据此关掉自更新、跳过需要管理员权限的内核驱动安装
+  STORE_BUILD,
 
   getSettings() {
     const s = deepMerge(DEFAULT_SETTINGS, readJson(SETTINGS_FILE, {}));
+    /**
+     * 0.5.6 起没有第三方底座了：老配置里的 mode=mumu / fydeos / attach，
+     * 或者手改出来的任何其它值，一律当 builtin 处理，并把残留的第三方字段删掉。
+     *
+     * 只在读的时候改内存里的对象，不立刻回写磁盘：设置文件是用户的，等他下次
+     * 保存设置时自然落盘；这样「打开一次 ApkStart 就改了他的 settings.json」不会发生。
+     */
+    s.engine.mode = 'builtin';
+    for (const k of ['mumuPath', 'mumuIndex', 'mumuRenderProfile', 'mumuMemoryGB', 'mumuCores', 'fydeosHost']) {
+      delete s.engine[k];
+    }
     // 旧版本默认无头运行：应用进程能起来但屏幕上没有窗口，等效于「打不开」。
     // 无条件迁移到带窗口模式，且不再允许通过旧配置把它关掉。
     s.engine.headless = false;
@@ -236,11 +309,14 @@ const store = {
   },
 
   iconPath(pkg) {
-    return path.join(ICON_DIR, `${pkg}.png`);
+    // 第二层防御：pkg 来自外部解析的 APK / apps.json，必须锁在数据目录内。
+    // 即使有旧版本写入的坏记录，也不能让它拼出 ICON_DIR 之外的路径（issue #2 P0-1）。
+    return path.join(ICON_DIR, `${safeFilePart(pkg)}.png`);
   },
 
   apkPath(pkg, version = 'cur') {
-    return path.join(APK_DIR, `${pkg}-${version}.apk`);
+    const v = /^[A-Za-z0-9_-]+$/.test(String(version)) ? version : 'cur';
+    return path.join(APK_DIR, `${safeFilePart(pkg)}-${v}.apk`);
   },
 
   ensureDirs,

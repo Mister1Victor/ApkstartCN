@@ -15,15 +15,27 @@ api.getI18n = async () => {
 };
 api.getSettings = async () => ({ ...settings, language: await ipcRenderer.invoke('test:language') });
 api.setSettings = async (patch) => { if (patch.language) await ipcRenderer.invoke('test:setLanguage', patch.language); return { ...settings, ...patch }; };
-api.listApps = async () => [{ package: 'org.example.app', label: 'Sample app', versionName: '1.0', installedAt: Date.now() }];
+api.listApps = async () => [{ package: 'org.example.app', label: 'Sample app', versionName: '1.0', running: true, installedAt: Date.now() }];
 api.runtimeStatus = async () => ({ adbOk: false, env: {}, phase: 'stopped' });
 api.startupInfo = async () => ({ smoke: true, version: '0.4.2-i18n.1' });
 api.info = async () => ({ version: '0.4.2-i18n.1', dataDir: 'F:\\Test', runtimeDir: 'F:\\Test\\runtime' });
 api.doctorProfile = async () => ({});
 api.runtimeUsage = async () => ({ totalText: '0 MB', reclaimable: 0, count: 0 });
-api.dataInfo = async () => ({ imageGB: 6, freeDiskMB: 20480 });
+api.dataInfo = async () => ({ imageGB: 6, freeDiskMB: 20480, overlay: true, pendingGB: 12, configuredGB: 12 });
+api.resources = async () => ({ host: { totalMB: 16384, cores: 8 }, limits: { maxMB: 12288, maxGB: 64 }, freeMB: 81920 });
+api.driversList = async () => ({ drivers: [], errors: [], host: {} });
 api.selfCheck = async () => ({ issues: [] });
 api.on = () => () => {};
 api.android = { status: async () => ({ ok: false }), set: async () => ({ ok: true }) };
 api.shell = { onState: () => () => {}, state: async () => ({ label: '', tip: '' }), minimize: () => {}, maximize: () => {}, close: () => {}, rotate: () => {} };
-contextBridge.exposeInMainWorld('apkstart', api);
+if (process.argv.includes('--splash-test')) {
+  contextBridge.exposeInMainWorld('apkstartSplash', {
+    getI18n: api.getI18n,
+    version: async () => '0.5.8',
+    isFirstRun: async () => true,
+    bundled: () => ipcRenderer.invoke('test:bundled'),
+    onProgress: () => {}, onDone: () => {}, close: () => {},
+  });
+} else {
+  contextBridge.exposeInMainWorld('apkstart', api);
+}

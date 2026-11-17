@@ -440,6 +440,32 @@ body {
 .field .row input { flex: 1; }
 .field.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+.pf-item { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; background: var(--panel-2); }
+.pf-head { display: flex; align-items: center; gap: 7px; }
+.pf-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: #9aa4b2; }
+.pf-dot.ok { background: #16a34a; }
+.pf-dot.warn { background: #d97706; }
+.pf-dot.bad { background: #dc2626; }
+.pf-title { font-size: 12.5px; font-weight: 600; color: var(--text); flex: 1; }
+.pf-detail { font-size: 11.5px; color: var(--faint); line-height: 1.55; margin-top: 4px; white-space: pre-wrap; }
+.pf-action { margin-top: 7px; }
+
+.drv-list { margin-bottom: 12px; }
+.drv-item {
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 11px; margin-bottom: 8px; background: var(--panel-2);
+}
+.drv-item.on { border-color: #b7e4c7; }
+.drv-head { display: flex; align-items: center; gap: 8px; }
+.drv-name { font-size: 12.5px; font-weight: 600; color: var(--text); flex: 1; }
+.drv-meta { font-size: 11px; color: var(--faint); margin-top: 3px; line-height: 1.5; }
+.drv-badge {
+  font-size: 10px; padding: 1px 6px; border-radius: 999px;
+  background: #eef2f6; color: var(--faint);
+}
+.drv-badge.hit { background: #e7f6ec; color: #17803d; }
+.drv-err { font-size: 11px; color: #b42318; line-height: 1.5; margin: 4px 0; }
+
 .switch-field { display: flex; align-items: center; gap: 14px; }
 .switch-field > div { flex: 1; }
 .switch {

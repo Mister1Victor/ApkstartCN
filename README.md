@@ -10,6 +10,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D6.svg)](#)
 
 **Windows 上的安卓应用运行器 —— 让安卓应用像 Windows 原生软件一样被安装和使用。**
+注：本项目为早期版本，作者自娱自乐产物，所有修改都是作者下班和休息日在处理，开源免费，不插广告，暂时也不是很好用，没有找过营销号推广，无妄之灾。
 
 - 🖱️ **双击 .apk 即安装**：注册 .apk 文件关联后，在资源管理器里双击 APK，自动解析 → 安装 → 生成桌面图标，全程无需打开任何模拟器界面。
 - 🧩 **每个应用一个桌面图标**：图标从 APK 内部离线提取并转为多尺寸 ICO，双击桌面图标 = 直接启动该应用，与打开一个原生 Windows 软件的体验一致。
@@ -42,10 +43,39 @@
 - GitHub：[github.com/RoutineMiku/apkstart/releases](https://github.com/RoutineMiku/apkstart/releases)
 - Gitee：[gitee.com/daily-miku/apkstart/releases](https://gitee.com/daily-miku/apkstart/releases)（国内直连快得多）
 
-安装包：
+安装包（三种形态，内容与版本号完全一致）：
 
-- **`ApkStart-v*-Setup.exe`**（约 1.3 GB）：**一个 EXE 包含全部运行时**（adb / Android Emulator / 系统镜像），装完首次启动自动把镜像展开到用户目录，**之后不再联网下载任何东西**。装到当前用户目录、不要求管理员权限。
-- 另有轻量版 `ApkStart-v*-win64-portable.zip`（**95 MB**，解压后约 226 MB）：首次启动才在后台下载运行时。运行时的下载源就是**本项目的 GitHub Release**（`ApkStart-runtime-*.zip` 整包），不走 dl.google.com；整包拿不到时才自动退回官方源。
+| 形态 | 文件名 | 何时选它 |
+|---|---|---|
+| 商店版 | `ApkStart_<四段版本>_x64.msix` | 从 Microsoft Store 装。内置完整运行时，装完不联网；自更新交给商店 |
+| 完整便携版 | `ApkStart-v*-win64-full.zip`（约 830 MB，解压 ~1.3 GB） | **不想装、也不想等下载**：解压即用，运行时（模拟器 + 系统镜像）全在包里 |
+| 安装版 | `ApkStart-v*-Setup.exe`（约 1.3 GB） | 想要桌面/开始菜单快捷方式、卸载项 |
+| 轻量便携版 | `ApkStart-v*-win64-portable.zip`（96 MiB，解压 ~227 MB） | 只想先试试，首次启动再联网下载运行时 |
+
+> 所有形态的 `ApkStart.exe` 都写入了**品牌图标 + 版本资源**（FileDescription = `ApkStart 安卓应用运行器`，
+> CompanyName = `RoutineMiku`，版本与 `package.json` 同步），不再是 Electron 的默认图标和 `33.x` 版本号。
+> 自己从源码打包时：`npm run pack`（轻量）/ `npm run pack:full`（完整）/ `npm run build:msix`（商店包）。
+
+### 画面铺满是怎么做到的
+
+模拟器的**物理面板方向**（`hw.lcd.width/height`）就是画面的真实形状。面板方向和应用自己声明的
+`screenOrientation` 不一致时，Android 只会给应用一个信箱式的中间窄条 —— 两侧补黑，换窗口大小、
+改 `wm size`、改 letterbox 样式都填不满（这套组合逐项试过，见 `src/core/apk.js` 的注释）。
+
+所以 ApkStart 在**安装 APK 时离线解析 `AndroidManifest.xml`**，统计出这个应用天然是横屏还是竖屏
+（启动 Activity 加权；全 `sensor` / `fullSensor` 的会在首次运行后再问安卓要一次实际值），存进
+`apps.json`，启动时按它选面板：
+
+- 红果短剧这类竖屏应用 → 竖屏面板 720×1280，正立、铺满、density 190（sw606dp）同时给出平板排版；
+- 墨读这类横屏应用 → 横屏面板 1280×720，正立、铺满。
+
+只有「面板方向和应用方向不一致」的那一次才重启运行时（约 40 秒，标题栏会给出提示），
+之后同方向的应用都是秒进。标题栏的旋转按钮会把这个应用的方向**记住**（其它应用不受影响），
+设置 → 应用窗口 → 屏幕方向可以改成「强制横屏 / 强制竖屏」。
+
+排版由「逻辑密度」决定：720 宽按 190dpi 算等于 **606dp**，正好越过 Android 的 600dp 平板断点，
+红果短剧的双列剧集页、设置页分栏都只在这个密度下出现（镜像默认 320dpi 只有 360dp，是手机排版）。
+这就是设置里的「平板排版」开关，默认打开；关掉会回到手机排版。
 
 ### 在线更新（自动选较快的源）
 
@@ -147,8 +177,14 @@ ApkStart 是一个**自持**的项目，运行时组件全部由自己下载、�
 - 内存/核心数按物理内存自动推导（2–4 GB / 2–4 核），数据分区从 16 GB 降到 4 GB；端口动态挑空闲的，中文路径自动转短路径，AVD 锁文件自动清理。
 - 失败原因会翻译成中文并附上修复建议；设置里可「导出诊断报告」。
 - 大文件下载默认 **8 线程分块 + 断点续传**，不支持 Range 的源自动回退单流。
-- 高级用户也可以在设置里切换为「连接已有运行时」（复用 WSA 等的 adb 端口），但这只是可选项，不是依赖。
-- 高级路径：也可以在设置里「连接已有运行时」，复用你机器上其它模拟器（WSA / MuMu 等）已经跑起来的 adb 端口。
+- **只用自带运行时，与其它模拟器无关**：ApkStart 不探测、不接管、也不驱动你机器上装的 MuMu / 雷电 / 蓝叠 / WSA；
+  装没装它们、它们怎么升级、端口怎么变，都不影响 ApkStart。设置里也不再提供「切换引擎」的选项。
+- **本机体检 · 自动配置**：装完先查一遍 CPU 虚拟化（VT-x/SVM）、Windows 虚拟机监控程序平台、
+  显卡与显存、内存和系统版本；能自动改的（内存 / 核心 / 画质 / 渲染后端）直接写进设置并固化成驱动，
+  需要管理员权限的给按钮，只能在 BIOS 里改的告诉你怎么改。见 [docs/preflight.md](docs/preflight.md)。
+- **驱动（兼容补丁）扩展**：如果某台机器必须改启动参数才跑得起来（老显卡 GLES 版本低、没开硬件加速、
+  某版驱动一开硬件渲染就崩），可以写一份 JSON 补丁：声明匹配哪些机器、命中后改哪些参数。
+  设置页里能导入、启用、导出本机模板；补丁只改白名单里的启动项，不执行任何代码。见 [docs/drivers.md](docs/drivers.md)。
 
 **容器式低成本运行**
 
@@ -222,6 +258,60 @@ Android 版本、freeform 支持、共享目录双向同步，加 `--apk 某应�
 | 兼容模式下运行红果免费短剧（Android 14 · AEHD 硬件加速） |
 |:---:|
 | ![红果短剧在 ApkStart 兼容模式运行](docs/images/compat-hongguo-playing.png) |
+
+### 提示「未启用硬件加速」怎么办
+
+安卓模拟器在 Windows 上只有两条加速路：
+
+| 方式 | 是什么 | 谁需要管理员 | 装完要重启吗 |
+|---|---|---|---|
+| **WHPX** | Windows 自带功能「Windows 虚拟机监控程序平台」 | 开这个功能时 | 要 |
+| **AEHD** | Google 自家内核驱动 | 装驱动时 | 不用 |
+
+- **安装版 / 便携版**：设置 → 环境自检 → 「未启用硬件加速」右侧点**修复**，会弹一次 UAC，自动开 WHPX；如果开不起来（系统不支持 / 你点了否），会自动改装 AEHD 驱动。
+- **微软商店（MSIX）版**：商店应用**不能自行提权**，所以点「修复」会直接帮你打开「启用或关闭 Windows 功能」对话框，勾选
+  **「Windows 虚拟机监控程序平台」**（英文 HypervisorPlatform），确定后**重启电脑**一次即可。
+
+  也可以自己用管理员 PowerShell 跑：
+
+  ```powershell
+  dism /online /enable-feature /featurename:HypervisorPlatform /all /norestart
+  dism /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+  ```
+
+> 注意别只开「虚拟机平台（VirtualMachinePlatform）」——那是 WSL2 要用的，模拟器要的是
+> **「虚拟机监控程序平台（HypervisorPlatform）」**。只开前者，`emulator -accel-check` 依然会说不可用。
+>
+> 没加速也能跑（纯软件模拟），只是开机会慢到几分钟——这也是应用里那条提示的目的，
+> 不是启动失败。
+
+### 桌面图标不对 / 显示成 ApkStart 的图标怎么办
+
+每个安卓应用的桌面快捷方式都应该用它**自己的图标**（安装时从 APK 里解出来存到
+`%APPDATA%\apkstart\icons\<包名>.ico`）。如果显示成了 ApkStart 的绿色播放键，或者干脆是空白图标：
+
+1. **设置 → 系统集成 → 重建快捷方式**（会把桌面和开始菜单的快捷方式按当前应用清单重写一遍，
+   连同图标和任务栏身份一起修好）；
+2. 还不行就删掉那个快捷方式，在 ApkStart 里右键应用 → 重新创建快捷方式/重装一次。
+
+> 为什么会坏：早期版本整理图标时把这些 `.lnk` 图标的 `IconLocation` 统一指向了 ApkStart 的品牌图；
+> 另外把便携版整个目录挪到别处后，`.lnk` 里记的绝对路径也会失效。重建一次即可。
+>
+> 顺带说一句：每个应用的快捷方式都带自己的 AppUserModelID，
+> 所以**固定到任务栏**后，任务栏按钮和固定项用的是同一个应用图标，不会混成 ApkStart。
+
+### 为什么我的 `adb devices` 看不到这台安卓设备
+
+ApkStart 的 adb 服务跑在**专用端口 5044**，和系统里你自己的 adb（5037）完全隔开 —— 这样你的 Android Studio / scrcpy 不会跟它抢设备，它也不会误杀你手动开的模拟器。
+
+要用命令行连它：
+
+```powershell
+$env:ANDROID_ADB_SERVER_PORT = 5044
+adb devices              # 会看到 emulator-5554
+```
+
+⚠️ **不要**对着 `5555` 端口手动 `adb connect`：Play 版系统镜像会弹「允许 USB 调试吗」的系统对话框，而且它会盖在正在运行的安卓应用上，看起来像是程序出了问题。
 
 ## 关于作者
 

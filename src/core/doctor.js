@@ -17,6 +17,7 @@ const path = require('path');
 const net = require('net');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const { memoryLimits } = require('./resources');
 
 const ASCII = /^[\x20-\x7e]*$/;
 const isAsciiPath = (p) => ASCII.test(String(p || ''));
@@ -60,24 +61,67 @@ function versionNumbers(v) {
 }
 
 /**
+ * 检测 GPU 厂商（NVIDIA / AMD / Intel），用于调整渲染后端优先级。
+ * 只在 Windows 上查 WMI；其他平台返回 'unknown'。
+ * 结果缓存 10 分钟，避免每次 chooseProfile 都 spawn wmic。
+ */
+let _gpuVendorCache = { vendor: 'unknown', at: 0 };
+function detectGpuVendor() {
+  if (process.platform !== 'win32') return 'unknown';
+  if (Date.now() - _gpuVendorCache.at < 600000) return _gpuVendorCache.vendor;
+  try {
+    const { execFileSync } = require('child_process');
+    // wmic 在 Win11 24H2+ 已被移除，改用 PowerShell Get-CimInstance
+    let names = '';
+    try {
+      names = execFileSync('powershell.exe', [
+        '-NoProfile', '-Command',
+        '(Get-CimInstance Win32_VideoController).Name -join "|"',
+      ], { encoding: 'utf8', windowsHide: true, timeout: 8000 });
+    } catch (_) {
+      // 回退到 wmic（老系统仍可用）
+      try {
+        names = execFileSync('wmic', ['path', 'win32_videocontroller', 'get', 'name', '/format:list'],
+          { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+      } catch (__) { /* ignore */ }
+    }
+    const lower = String(names).toLowerCase();
+    let vendor = 'unknown';
+    // 优先匹配独显（NVIDIA/AMD），虚拟显示适配器排在后面
+    if (/nvidia|geforce|rtx\s|gtx\s/.test(lower)) vendor = 'nvidia';
+    else if (/(?<!virtual\s)(amd|radeon|rx\s\d)/.test(lower)) vendor = 'amd';
+    else if (/intel|uhd\s|iris|arc\s/.test(lower)) vendor = 'intel';
+    _gpuVendorCache = { vendor, at: Date.now() };
+    return vendor;
+  } catch (_) {
+    _gpuVendorCache = { vendor: 'unknown', at: Date.now() };
+    return 'unknown';
+  }
+}
+
+/**
  * emulator 36.4.9 起把 swiftshader_indirect 标记为弃用，新增 -gpu software。
  * 37.x 上传 swiftshader_indirect 会出现 GL 初始化失败/直接退出（设备差异很大）。
  * 因此必须按版本挑候选，且每个候选都有退路。
+ *
+ * 按 GPU 厂商微调优先级：
+ *   NVIDIA：host 几乎总是最优（驱动成熟），swangle 兜底
+ *   AMD：host 在部分驱动下会崩（尤其老驱动），swangle 提到第二优先
+ *   Intel：host 通常 OK，但集显性能弱时 swangle 更稳
+ *   unknown：保持默认顺序
  */
 function gpuCandidates(emulatorVersion) {
   const [major, minor, patch] = versionNumbers(emulatorVersion);
   const modern = major > 36 || (major === 36 && (minor > 4 || (minor === 4 && patch >= 9)));
-  return modern
-    // 顺序即「自动模式的尝试优先级」：
-    // 1) host        —— 用真实显卡渲染，最省 CPU、最跟手；
-    // 2) swangle     —— ANGLE 跑在 SwiftShader 之上的软件渲染。比裸 software/swiftshader
-    //                  对 Android WebView 的合成层友好得多（红果/抖音这类「点同意后进主界面
-    //                  黑屏」就是裸软件渲染过不了 WebView 合成导致的），因此排在第二顺位；
-    // 3) software    —— 纯 SwiftShader 兜底，兼容性OK但 WebView 合成易黑屏，仅最后才用；
-    // 4) swiftshader —— 旧名兜底。
-    // 注意 safeGpu（关闭加速的 TCG 兜底）仍取 software，保证「慢但最兼容」。
+  const base = modern
     ? ['host', 'swangle', 'software', 'swiftshader']
     : ['host', 'swiftshader_indirect', 'swiftshader'];
+  const vendor = detectGpuVendor();
+  if (vendor === 'amd' && modern) {
+    // AMD 驱动在某些版本下 host 模式会 GL 初始化失败，把 swangle 提到前面
+    return ['swangle', 'host', 'software', 'swiftshader'];
+  }
+  return base;
 }
 
 /** Windows 8.3 短路径：中文用户名 / 中文安装目录时 emulator 会找不到文件 */
@@ -142,14 +186,30 @@ function chooseProfile({
   const accelOk = !!(accel && accel.ok);
   // 3GB 足够 Android 14 与主流应用；再高只会放大内存占用和 quickboot 快照体积
   let memoryMB = clamp(Math.floor((host.totalMB * 0.22) / 256) * 256, 2048, 3072);
+  // 「省资源」模式：刷视频/看小说这类轻负载用不到 3G，把上限压到 2G。
+  // 直接效果是 qemu 常驻内存少约 1GB、quickboot 快照也小 1GB（磁盘同步受益）。
+  // 只有用户没手动指定内存时才收敛，手动值永远优先。
+  const rmode = settings && settings.engine && settings.engine.resourceMode;
+  if (rmode === 'save' && !overrides.memoryMB) {
+    memoryMB = clamp(memoryMB, 2048, 2048);
+  }
   // 物理可用内存不够时下调；Android 14 最低 2G，低于此只能靠 TCG 慢速跑
   if (host.freeMB && host.freeMB < memoryMB + 1024) {
     memoryMB = Math.max(2048, Math.floor((host.freeMB * 0.5) / 256) * 256);
   }
-  if (overrides.memoryMB) memoryMB = clamp(Number(overrides.memoryMB) || memoryMB, 1536, 8192);
+  if (overrides.memoryMB) {
+    // 上限跟着宿主走：早先写死 8192，结果 32GB 机器上也最多只能分 8GB，
+    // 大型游戏（尤其带高清资源包的）进场景就频繁回收贴图，表现是卡顿/黑屏。
+    const lim = memoryLimits(host.totalMB);
+    memoryMB = clamp(Number(overrides.memoryMB) || memoryMB, 1536, lim.maxMB);
+  }
 
   let cores = clamp(Math.floor(host.cores / 2), 2, 4);
-  if (overrides.cores) cores = clamp(Number(overrides.cores) || cores, 1, 8);
+  if (overrides.cores) {
+    // 同样跟着宿主：至少留 1 核给 Windows，单核机器仍然给 1 核
+    const maxCores = Math.max(1, (host.cores || 1) - 1);
+    cores = clamp(Number(overrides.cores) || cores, 1, maxCores);
+  }
   // 用户没手动指定核数时才由轻量模式收敛，手动值永远优先
   const lite = settings ? liteProfile({ host, engine: settings.engine || {} }) : null;
   if (lite && !overrides.cores) cores = Math.min(cores, lite.cores);
@@ -159,8 +219,14 @@ function chooseProfile({
   // （表现就是应用内更新时提示「磁盘空间不足」）。默认按磁盘余量给 6/8GB，
   // 用户也可以直接在设置里指定（改大后下次开机就地扩容，不丢数据）。
   const wantGB = Number((settings && settings.engine && settings.engine.dataPartitionGB) || 0);
-  const autoDataMB = disk && disk < 12288 ? 4096 : 6144;
-  const dataMB = wantGB > 0 ? clamp(Math.round(wantGB * 1024), 2048, 65536) : autoDataMB;
+  // 自动值也跟磁盘余量走：50GB 级游戏解包后接近 90GB，余量大的机器给 16GB 起步，
+  // 免得装完第一个大游戏就开始报「空间不足」。
+  const autoDataMB = disk && disk < 12288 ? 4096 : (disk && disk > 262144 ? 16384 : 6144);
+  // 用户指定时按「所在磁盘的 80%」封顶：填 128GB 但盘里只有 20GB，只会装到一半失败
+  const dataMaxMB = disk ? Math.max(2048, Math.floor((disk * 0.8) / 1024) * 1024) : 262144;
+  const dataMB = wantGB > 0
+    ? clamp(Math.round(wantGB * 1024), 2048, Math.min(262144, dataMaxMB))
+    : autoDataMB;
 
   const gpus = gpuCandidates(emulatorVersion);
   const gpu = overrides.gpuMode && gpus.includes(overrides.gpuMode) ? overrides.gpuMode : gpus[0];
@@ -223,8 +289,11 @@ function overridesFromSettings(engine = {}) {
  * 之前设置页直接调 chooseProfile()（不带版本和加速状态），会在 37.x 机器上
  * 错误地显示已弃用的 swiftshader_indirect / 软件模拟，和实跑参数对不上。
  */
-function autoProfile({ settings = {}, accel, emulatorVersion = '', diskMB = 0, port = 5554, adbPort = 5044 } = {}) {
+function autoProfile({ settings = {}, accel, emulatorVersion = '', diskMB = 0, port = 5554, adbPort = 5044, host = null } = {}) {
   return chooseProfile({
+    // host 可注入：单测/诊断想复现「4 核小机器」时不用真的换机器。
+    // 不传就按本机实际情况算（正常运行时都是这条路径）。
+    host: host || hostInfo(),
     accel, emulatorVersion, diskMB, port, adbPort, settings,
     overrides: overridesFromSettings(settings && settings.engine),
   });
@@ -522,7 +591,7 @@ function vcRedistOk() {
 
 module.exports = {
   hostInfo, freeDiskMB, isAsciiPath, shortPath, lcdFor, liteProfile,
-  versionNumbers, gpuCandidates, chooseProfile, planVariants,
+  versionNumbers, gpuCandidates, detectGpuVendor, chooseProfile, planVariants,
   overridesFromSettings, autoProfile,
   freePortPair, freeAdbPort, snapshotKey, imageIdentity,
   diagnose, describeProfile, writeReport, vcRedistOk,

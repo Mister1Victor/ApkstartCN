@@ -153,13 +153,32 @@ class WinAgent extends EventEmitter {
     return this.call(req, 4000).catch(() => ({ ok: false, n: 0 }));
   }
 
-  /** 把模拟器窗口嵌进宿主窗口，并摆到 x,y,w,h（宿主客户区坐标） */
-  async embed(hostHwnd, rect) {
-    return this.call({
+  /**
+   * 把画面窗口嵌进宿主窗口，并摆到 x,y,w,h（宿主客户区坐标）。
+   *
+   * @param {number|string} hostHwnd 宿主窗口句柄
+   * @param {object} rect { x, y, w, h, clipTop }
+   * @param {string[]} [targets] 第三方底座报上来的候选句柄（"0x…"）。
+   *        不传 = 老行为：由代理按进程作用域自己找自带 emulator 的窗口。
+   *        传了 = 只嵌这些句柄里的一个（MuMu / 其它模拟器的画面窗口）。
+   */
+  async embed(hostHwnd, rect, targets = null) {
+    const req = {
       cmd: 'embed', host: String(hostHwnd),
       x: Math.round(rect.x), y: Math.round(rect.y),
       w: Math.round(rect.w), h: Math.round(rect.h),
-    });
+    };
+    if (Array.isArray(targets) && targets.length) {
+      req.target = targets.map((t) => String(t)).join(',');
+    }
+    return this.call(req, 6000);
+  }
+
+  /** 候选句柄现在还存在几个（第三方底座就绪门禁用） */
+  async windowReady(targets = []) {
+    if (!Array.isArray(targets) || !targets.length) return { ok: false, alive: 0 };
+    return this.call({ cmd: 'winready', target: targets.join(',') }, 3000)
+      .catch(() => ({ ok: false, alive: 0 }));
   }
 
   async fit(rect) {
@@ -178,7 +197,30 @@ class WinAgent extends EventEmitter {
   async show() { return this.call({ cmd: 'show' }, 3000); }
   /** 通知代理进入低延迟模式：大幅降低窗口扫描频率，把 CPU 留给安卓渲染 */
   async setPerformanceMode(on) { return this.call({ cmd: 'perf', on: on ? 1 : 0 }, 3000); }
-  async detach() { return this.call({ cmd: 'detach' }, 5000); }
+  /** @param {boolean} keep true=切到独立窗口模式（别把模拟器窗口藏掉，并保留句柄） */
+  async detach(keep = false) { return this.call({ cmd: 'detach', keep: keep ? 1 : 0 }, 5000); }
+  /** 独立窗口模式：把模拟器原生窗口摆到指定屏幕矩形（不嵌入） */
+  async layout(rect) {
+    return this.call({
+      cmd: 'layout',
+      x: Math.round(rect.x), y: Math.round(rect.y),
+      w: Math.round(rect.w), h: Math.round(rect.h),
+    }, 4000);
+  }
+  /**
+   * 把模拟器原生窗口的标题从 "Android Emulator - apkstart:5554" 改成用户看得懂的名字。
+   * 传空串时默认 "ApkStart"。代理会在巡检里持续补设（Qt 偶尔会自己改回去）。
+   */
+  async setTitle(text = 'ApkStart') {
+    return this.call({ cmd: 'title', text: String(text || 'ApkStart') }, 4000);
+  }
+  /**
+   * 给模拟器原生窗口设图标（独立窗口模式下任务栏/Alt+Tab 显示当前应用图标）。
+   * @param {string} file PNG/ICO 绝对路径
+   */
+  async setIcon(file) {
+    return this.call({ cmd: 'icon', file: String(file || '') }, 4000);
+  }
   async probe() { return this.call({ cmd: 'probe' }, 4000); }
   /** 列出当前可见的顶层窗口（用于验证「只有软件界面 / 只有安卓应用窗口」） */
   async windows() { return this.call({ cmd: 'windows' }, 4000); }

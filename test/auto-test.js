@@ -6,6 +6,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const zhMessages = require('../src/locales/zh-CN.json');
 
 const TMP = path.join(os.tmpdir(), `apkstart-auto-test-${Date.now()}`);
 process.env.APPDATA = TMP;
@@ -30,15 +31,21 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
   console.log('\n[doctor.js 自动参数]');
 
   await test('GPU 后端按 emulator 版本选择（新版本 host 优先 + 软件渲染兜底，老版本 swiftshader_indirect）', () => {
-    // 新版本（37.x/36.4.9+）：host 最跟手，失败会自动降级到 software/swangle
-    assert(doctor.gpuCandidates('37.3.8.0')[0] === 'host', '37.x 首选应为 host');
-    assert(doctor.gpuCandidates('36.4.9.0')[0] === 'host');
-    assert(doctor.gpuCandidates('37.3.8.0').includes('software'), '新版本必须有软件渲染兜底');
+    // gpuCandidates 会根据本机 GPU 厂商微调顺序（AMD 把 swangle 提前），
+    // 所以这里只断言「候选列表包含关键项」而非固定首位。
+    const c37 = doctor.gpuCandidates('37.3.8.0');
+    assert(c37.includes('host'), '37.x 候选必须包含 host');
+    assert(c37.includes('swangle'), '37.x 候选必须包含 swangle');
+    assert(c37.includes('software'), '新版本必须有软件渲染兜底');
     // 37.x 上传 swiftshader_indirect 会 GL 初始化失败，绝不能出现在候选里
-    assert(!doctor.gpuCandidates('37.3.8.0').includes('swiftshader_indirect'));
+    assert(!c37.includes('swiftshader_indirect'));
     // 老版本仍走 swiftshader_indirect
-    assert(doctor.gpuCandidates('35.1.4.0')[0] === 'host');
-    assert(doctor.gpuCandidates('35.1.4.0').includes('swiftshader_indirect'));
+    const c35 = doctor.gpuCandidates('35.1.4.0');
+    assert(c35.includes('host'));
+    assert(c35.includes('swiftshader_indirect'));
+    // detectGpuVendor 应返回已知值或 unknown（不抛异常）
+    const v = doctor.detectGpuVendor();
+    assert(['nvidia', 'amd', 'intel', 'unknown'].includes(v), `detectGpuVendor 返回了意外值: ${v}`);
   });
 
   await test('小内存机器自动降配（不再是写死 4GB / 4 核）', () => {
@@ -48,7 +55,7 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
     assert(p.cores === 2, `核心应为 2，实际 ${p.cores}`);
     assert(p.accel === 'off', '无硬件加速应自动回退软件模拟');
     assert(p.bootTimeoutMs > 240000, '软件模拟应给更长的开机超时');
-    assert(p.gpu === 'host', `首选渲染应为 host（失败由 planVariants 降级），实际 ${p.gpu}`);
+    assert(p.gpu === 'host' || p.gpu === 'swangle', `首选渲染应为 host 或 swangle（AMD 机器 swangle 优先），实际 ${p.gpu}`);
     // accel 关闭时的保底参数必须是软件渲染，否则 TCG 下无 GPU 可用
     const lastResort = doctor.planVariants(p).find((v) => v.lastResort);
     assert(lastResort && /software|swiftshader/.test(lastResort.gpu), '保底方案必须用软件渲染');
@@ -126,10 +133,15 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
   });
 
   await test('设置页展示的自动参数与实跑参数一致（37.x 不再显示弃用后端）', () => {
-    const common = { accel: { ok: true }, emulatorVersion: '37.3.8.0', diskMB: 50000, port: 5562, adbPort: 5044 };
+    const common = {
+      accel: { ok: true }, emulatorVersion: '37.3.8.0', diskMB: 50000, port: 5562, adbPort: 5044,
+      // 显式给宿主：内存/核心上限现在跟着宿主走，不加这一项测试结果会随 CI 机器规格漂移
+      // （GitHub runner 只有 4 核，手动填 6 核会被正确收敛成 3 核，断言就会误报）
+      host: { totalMB: 32768, freeMB: 24000, cores: 12, home: 'C:\\x', homeAscii: true, tmp: TMP, platform: 'win32', arch: 'x64', rdp: false },
+    };
     const p = doctor.autoProfile({ ...common, settings: { engine: { autoMemory: true, gpuMode: 'auto', memoryMB: 0, cores: 0 } } });
     const text = doctor.describeProfile(p);
-    assert(p.gpu === 'host', `应为 host（失败降级），实际 ${p.gpu}`);
+    assert(p.gpu === 'host' || p.gpu === 'swangle', `应为 host 或 swangle（AMD 机器），实际 ${p.gpu}`);
     assert(p.accelOk === true && text.includes('硬件加速'), text);
     assert(!text.includes('swiftshader_indirect'), text);
     assert(text.includes('端口 5562'), text);
@@ -507,7 +519,10 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
     const j = adb.indexOf('async resetDisplayOverrides(');
     const body = adb.slice(i, j);
     assert(!/wm size \d/.test(body), 'setOrientation 不得再设置 wm size 覆盖');
-    assert(/wm density 190/.test(body), 'density 只作为退化路径保留');
+    // density 现在统一走 tabletDensity()（用户可在设置里关掉平板排版），
+    // 但常量本身必须仍是 190（720 宽 → 606dp 才越过平板断点）。
+    assert(/wm density \$\{tabletDensity\(\)\}/.test(body), 'density 只作为退化路径保留');
+    assert(/const TABLET_DENSITY = 190/.test(adb), '平板密度常量必须是 190');
   });
 
   await test('游戏模式必须使用高优先级且关闭全局鼠标钩子', () => {
@@ -515,6 +530,95 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
     assert(/game\s*=\s*'High'/.test(ps), 'game 级别要把 qemu 提到 High');
     const aw = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'appwin.js'), 'utf8');
     assert(/opts\.enabled && !game/.test(aw), 'game 模式不能装 WH_MOUSE_LL 全局钩子');
+  });
+
+  await test('按键映射引擎：查表、转命令、限流', async () => {
+    const { lookup, toCommand, PRESETS } = require('../src/core/keymap');
+    const { KeymapEngine } = require('../src/core/keymap-engine');
+
+    // 预设模板完整性
+    assert(PRESETS.fps && PRESETS.fps.mappings.length >= 4, 'FPS 预设至少 4 个映射');
+    assert(PRESETS.rpg && PRESETS.rpg.mappings.length >= 4, 'RPG 预设至少 4 个映射');
+    assert(PRESETS.generic && PRESETS.generic.mappings.length >= 3, '通用预设至少 3 个映射');
+
+    // 查表：大小写不敏感
+    assert(lookup(PRESETS.fps.mappings, 'W').action === 'tap', '大写 W 应匹配小写 w');
+    assert(lookup(PRESETS.fps.mappings, 'z') === null, '未映射的键返回 null');
+
+    // 转命令：归一化坐标 → 像素
+    const cmd = toCommand({ action: 'tap', x: 0.5, y: 0.5 }, 720, 1280);
+    assert(cmd === 'input tap 360 640', `tap 命令错误: ${cmd}`);
+    const sw = toCommand({ action: 'swipe', x1: 0, y1: 0.5, x2: 1, y2: 0.5, duration: 100 }, 720, 1280);
+    assert(sw === 'input swipe 0 640 720 640 100', `swipe 命令错误: ${sw}`);
+    const ke = toCommand({ action: 'keyevent', code: 4 }, 720, 1280);
+    assert(ke === 'input keyevent 4', `keyevent 命令错误: ${ke}`);
+
+    // 引擎：启用/禁用、按应用查表、限流
+    const calls = [];
+    const eng = new KeymapEngine({
+      execInput: (c) => { calls.push(c); return Promise.resolve(); },
+      getSize: () => ({ width: 720, height: 1280 }),
+      minInterval: 0,  // 测试里不限流
+    });
+    eng.setMap('com.test.game', PRESETS.fps.mappings);
+    assert(eng.getMap('com.test.game').length > 0, 'setMap/getMap 应工作');
+    eng.enable(false);
+    assert(await eng.handleKey('w', 'com.test.game') === false, '禁用时不应消费按键');
+    eng.enable(true);
+    assert(await eng.handleKey('w', 'com.test.game') === true, '启用时应消费已映射的按键');
+    assert(await eng.handleKey('z', 'com.test.game') === false, '未映射的键不应消费');
+    assert(await eng.handleKey('w', 'com.other.app') === false, '其他应用不应命中');
+    assert(calls.length === 1 && /input tap/.test(calls[0]), `应发一次 input tap，实际: ${calls.join('|')}`);
+  });
+
+  await test('GPU 厂商检测：返回已知值或 unknown，AMD 机器 swangle 优先', () => {
+    const doc = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'doctor.js'), 'utf8');
+    assert(/detectGpuVendor/.test(doc), '要有 detectGpuVendor 函数');
+    assert(/Get-CimInstance Win32_VideoController/.test(doc), '要用 PowerShell CIM（wmic 在 Win11 24H2+ 已移除）');
+    assert(/vendor === 'amd'[\s\S]{0,200}swangle.*host/.test(doc), 'AMD 机器应把 swangle 排在 host 前面');
+    const d = require('../src/core/doctor');
+    const v = d.detectGpuVendor();
+    assert(['nvidia', 'amd', 'intel', 'unknown'].includes(v), `返回值应为已知厂商或 unknown，实际: ${v}`);
+  });
+
+  await test('开机动画：splash 窗口 + 进度推送 + 淡出', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    assert(fs.existsSync(path.join(root, 'src', 'ui', 'splash.html')), '缺少 splash.html');
+    assert(fs.existsSync(path.join(root, 'src', 'ui', 'splash.css')), '缺少 splash.css');
+    assert(fs.existsSync(path.join(root, 'src', 'ui', 'splash.js')), '缺少 splash.js');
+    assert(fs.existsSync(path.join(root, 'src', 'splash-preload.js')), '缺少 splash-preload.js');
+    assert(/splashWin/.test(mainJs), 'main.js 要创建 splash 窗口');
+    assert(/splashProgress/.test(mainJs), '要有 splashProgress 推送函数');
+    assert(/splashDone/.test(mainJs), '要有 splashDone 完成信号');
+    assert(/splash:version/.test(mainJs) || /splash:isFirstRun/.test(mainJs), 'splash IPC 要注册');
+  });
+
+  await test('前台应用优先级不能用 below（点击跟手 / 视频不掉帧）', () => {
+    const engJs = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'engine.js'), 'utf8');
+    // balanced/performance 有应用在前台时必须是 normal：below 会让 qemu 被饿，
+    // 表现为视频解码掉帧、点击要等一下才响应（用户说的「点击不跟手」主因）。
+    const begin = engJs.slice(engJs.indexOf('async beginApp'));
+    assert(/mode === 'game' \? 'game' : 'normal'/.test(begin),
+      "beginApp 前台优先级应映射为 game→game、其余→normal");
+    assert(!/performance.*\? 'normal' : 'below'/.test(begin),
+      '不能再把 balanced 落到 below');
+    // 每次打开/切回都要重设优先级：endApp 会降到 idle，切换回来不提权就会发木
+    const setIdx = begin.indexOf("setPriority(level)");
+    const firstIdx = begin.indexOf("if (first)");
+    assert(setIdx > -1, 'beginApp 要调 setPriority');
+    // setPriority 不应只在第一个 if(first) 块里 —— 切换应用（非 first）也要提权
+    const firstBlock = begin.slice(firstIdx, begin.indexOf('\n\n', firstIdx));
+    assert(!/setPriority\(level\)/.test(firstBlock) || begin.split('setPriority(level)').length >= 2,
+      'setPriority 要在每次 beginApp 都执行，不只第一次');
+  });
+
+  await test('省资源模式应下调内存上限（减运行占用）', () => {
+    const doc = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'doctor.js'), 'utf8');
+    assert(/rmode === 'save'[\s\S]{0,120}2048/.test(doc),
+      'save 模式要把 memoryMB 压到 2048（省约 1GB 内存 + 1GB 快照磁盘）');
+    // 手动指定内存时永远优先，不能被 save 覆盖
+    assert(/!overrides\.memoryMB/.test(doc), 'save 收敛内存要让位于用户手动值');
   });
 
   await test('新版 emulator 写的 ram.bin 必须被认作完整快照（否则刚存好的 3GB 会被当空壳删掉）', () => {
@@ -783,12 +887,12 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
 
     const auto = doctor.autoProfile({
       settings: { engine: { autoMemory: true, liteMode: true } },
-      accel: { ok: true }, emulatorVersion: '37.3.8.0', diskMB: 100000,
+      accel: { ok: true }, emulatorVersion: '37.3.8.0', diskMB: 100000, host,
     });
     assert(auto.lite === true && auto.cores <= 4, JSON.stringify({ lite: auto.lite, cores: auto.cores }));
     const manual = doctor.autoProfile({
       settings: { engine: { autoMemory: false, cores: 6, liteMode: true } },
-      accel: { ok: true }, emulatorVersion: '37.3.8.0', diskMB: 100000,
+      accel: { ok: true }, emulatorVersion: '37.3.8.0', diskMB: 100000, host,
     });
     assert(manual.cores === 6, '用户手动指定的核数必须优先于轻量模式');
     assert(/轻量容器/.test(doctor.describeProfile(auto)), '诊断摘要应标出轻量容器');
@@ -814,6 +918,408 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
     assert(/Poll\(50,\s*SelectMode\.SelectRead\)/.test(agentPs1), '主循环应短轮询保持消息泵响应');
     assert(/now - _embedAt < 8000/.test(agentPs1), '窗口巡检必须限时，不能永久每 2 秒 EnumWindows');
     assert(/setLiteMode/.test(uiHtml) && /setDeepTrim/.test(uiHtml), '设置页需暴露轻量容器选项');
+  });
+
+  await test('独立窗口模式：不 SetParent、按面板比例给尺寸、清理不藏用户窗口', () => {
+    const root = path.join(__dirname, '..');
+    const agentPs1 = fs.readFileSync(path.join(root, 'src', 'core', 'win', 'agent.ps1'), 'utf8');
+    const appwinJs = fs.readFileSync(path.join(root, 'src', 'core', 'appwin.js'), 'utf8');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    const uiHtml = fs.readFileSync(path.join(root, 'src', 'ui', 'index.html'), 'utf8');
+
+    // 开关一路通到底：UI -> main -> appwin
+    assert(/setWindowEmbed/.test(uiHtml), '设置页需要「窗口承载方式」开关');
+    assert(/windowEmbed === false/.test(mainJs), 'main 必须能识别独立窗口模式');
+    assert(/openDetached/.test(appwinJs), 'appwin 需要 openDetached');
+    // 以前是 `detached: displaySettings().windowEmbed === false` 的行内写法，
+    // 现在提到局部变量（因为还要据此决定 showWhileWaiting），两者都认。
+    assert(/detached:\s*displaySettings\(\)\.windowEmbed === false/.test(mainJs)
+      || /const detached = displaySettings\(\)\.windowEmbed === false/.test(mainJs),
+      '开窗口时要带上 detached');
+
+    // 独立模式绝不能 SetParent——那正是嵌入问题的根源
+    // （只看真正的代码行，注释里提到 SetParent 是在解释为什么不用它）
+    const codeOnly = (src) => src.split('\n')
+      .map((l) => l.replace(/\/\/.*$/, ''))
+      .filter((l) => l.trim() && !/^\s*(\*|\/\*)/.test(l))
+      .join('\n');
+    const layoutBlock = agentPs1.slice(agentPs1.indexOf('cmd == "layout"'));
+    const layoutBody = codeOnly(layoutBlock.slice(0, layoutBlock.indexOf('cmd == "hook"')));
+    assert(!/SetParent\s*\(/.test(layoutBody), 'layout 不能 SetParent（独立模式就是要绕开它）');
+    assert(/SetWindowPos\s*\(/.test(layoutBody), 'layout 应该只把窗口摆到目标矩形');
+
+    // 清理逻辑在独立模式下必须收手，否则会把用户正在看的窗口当杂物藏掉
+    assert(/_detachedMode/.test(agentPs1), 'agent.ps1 需要 _detachedMode 标记');
+    const detachBlock = agentPs1.slice(agentPs1.indexOf('cmd == "detach"'));
+    assert(/keep/.test(detachBlock.slice(0, 600)), 'detach 需要 keep 参数区分「切独立」和「结束嵌入」');
+
+    // 尺寸要按面板比例算：模拟器自己锁宽高比，给错比例会被夹回去
+    assert(/_panelRatio/.test(appwinJs), '独立窗口尺寸必须按面板比例计算');
+    assert(!/w:\s*Math\.min\(area\.w - 80, 1280\)/.test(appwinJs), '不能再写死 1280 宽（会被模拟器夹成竖条）');
+  });
+
+  await test('只有一个运行时：注册表固定 builtin，装了什么模拟器都不影响', () => {
+    const backends = require('../src/core/backends');
+    // 0.5.6 起不再有自动挑选：不管本机装了 MuMu / 雷电 / 蓝叠 / WSA，
+    // 都只跑 ApkStart 自己的运行时，只按设置读也不会有第二个候选。
+    assert(backends.REGISTRY.length === 1, '注册表里出现了第二个底座');
+    assert(backends.REGISTRY[0].id === 'builtin', '唯一底座不是 builtin');
+  });
+
+  await test('窗口标题改 ApkStart：识别逻辑必须同时认新标题', () => {
+    const root = path.join(__dirname, '..');
+    const ps1 = fs.readFileSync(path.join(root, 'src', 'core', 'win', 'agent.ps1'), 'utf8');
+    const agent = fs.readFileSync(path.join(root, 'src', 'core', 'agent.js'), 'utf8');
+    const appwin = fs.readFileSync(path.join(root, 'src', 'core', 'appwin.js'), 'utf8');
+
+    assert(/SetWindowTextW/.test(ps1), 'agent.ps1 需要 SetWindowTextW 声明');
+    assert(/cmd == "title"/.test(ps1), 'agent.ps1 需要 title 命令');
+    assert(/LooksLikeEmulator/.test(ps1), '改完标题后还要能认出这个窗口，不能只认 Android Emulator');
+    assert(/_ourTitle/.test(ps1), '要记住设过的标题');
+    // Qt 会在窗口重建时把标题改回去，巡检里必须补设
+    assert(/QuietSweep[\s\S]{0,600}SetWindowTextW/.test(ps1), '巡检里要补设标题');
+    assert(/setTitle\(/.test(agent), 'agent.js 要暴露 setTitle');
+    assert(/agent\.setTitle\(/.test(appwin), '独立窗口打开时要真的改标题');
+  });
+
+  await test('中文环境：开机注入 locale、静默装拼音输入法、captive portal 国内端点', () => {
+    const root = path.join(__dirname, '..');
+    const emuJs = fs.readFileSync(path.join(root, 'src', 'core', 'emulator.js'), 'utf8');
+    const adbJs = fs.readFileSync(path.join(root, 'src', 'core', 'adb.js'), 'utf8');
+    const engJs = fs.readFileSync(path.join(root, 'src', 'core', 'engine.js'), 'utf8');
+    const storeJs = fs.readFileSync(path.join(root, 'src', 'core', 'store.js'), 'utf8');
+    const html = fs.readFileSync(path.join(root, 'src', 'ui', 'index.html'), 'utf8');
+
+    // locale 用官方 -change-locale：实测 -prop persist.sys.locale 会被模拟器
+    // 拦截、guest 里 getprop 一个都看不到，只有 -change-locale 会真正改系统语言
+    assert(/'\-change-locale',\s*locale/.test(emuJs), '必须用 -change-locale 设系统语言');
+    // 只看代码行：注释里解释「为什么不用 -prop」时提到它不算
+    const emuCode = emuJs.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+    assert(!/-prop[\s\S]{0,80}persist\.sys\.locale/.test(emuCode),
+      '不能再用无效的 -prop persist.sys.locale');
+    assert(/_guestLocale/.test(emuJs), '要有可配置的语言来源');
+    // 默认中文
+    assert(/locale:\s*'zh-CN'/.test(storeJs), '默认语言必须是简体中文');
+    assert(/chineseIme:\s*true/.test(storeJs), '默认开启中文输入法');
+
+    // 输入法：随包带 APK、开机装好并启用
+    assert(fs.existsSync(path.join(root, 'assets', 'PinyinIME.apk')), '缺少 PinyinIME.apk');
+    assert(/ensureChineseIme/.test(adbJs), 'adb 需要 ensureChineseIme');
+    assert(/com\.android\.inputmethod\.pinyin/.test(adbJs), '要用谷歌拼音输入法');
+    assert(/ime enable/.test(adbJs) && /default_input_method/.test(adbJs), '要启用并设为默认');
+    assert(/ensureChineseIme/.test(engJs), 'prepare() 里要真正调用安装');
+    assert(/_chineseReady/.test(engJs), '中文初始化要幂等（每次开机只做一次）');
+    assert(/chineseIme/.test(engJs), '要允许用户关掉');
+
+    // 联网验证端点：不能让 gstatic 把网络标成「!」
+    assert(/captive_portal_http_url/.test(adbJs), '要设置国内联网验证端点');
+    assert(/connect\.rom\.miui\.com/.test(adbJs), '端点要国内可达');
+
+    // 设置页要有开关
+    assert(/setLocale/.test(html) && /setChineseIme/.test(html), '设置页要暴露语言/输入法开关');
+  });
+
+  await test('方向自愈：平板/横屏画面躺倒 90° 要能自动纠正', () => {
+    const root = path.join(__dirname, '..');
+    const engJs = fs.readFileSync(path.join(root, 'src', 'core', 'engine.js'), 'utf8');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+
+    // 判断依据：init=WxH 与 cur=WxH 的宽高顺序相反 = 逻辑空间被旋转了
+    assert(/_healOrientation/.test(engJs), '要有方向自愈方法');
+    assert(/init=\(\\d\+\)x\(\\d\+\)/.test(engJs), '要读 init 面板尺寸');
+    assert(/cur=\(\\d\+\)x\(\\d\+\)/.test(engJs), '要读 cur 逻辑空间');
+    assert(/initLand !== curLand/.test(engJs), '只在宽高顺序相反（真躺倒）时才重锁方向');
+    // 横屏平板模式的稳定性：没躺倒也要校验 ignore-orientation + density 是否丢失并补齐
+    assert(/mSetIgnoreOrientationRequest=true/.test(engJs), '横屏要校验 ignore-orientation 是否还在');
+    assert(/Override density:/.test(engJs), '要读 Override density 判断是否丢失');
+    assert(/tabletMode/.test(engJs), '平板排版开关要能被关掉');
+    assert(/wm set-ignore-orientation-request true/.test(engJs), '丢了要补 ignore-orientation');
+    assert(/wm density \$\{densityWanted\}/.test(engJs), '丢了要补 density');
+    assert(/_healOrientation/.test(engJs.slice(engJs.indexOf('startWatchdog'))), '看门狗要周期自愈');
+    // 应用刚起来 Activity 重建会覆盖方向，需要在那个时机补一次。
+    // 窗口放宽到 2200 字符：onAppUp 的 then 回调里还要处理开机动画淡出，
+    // 那些注释会把 _healOrientation 往后推，600 字符的窗口一加东西就误报。
+    assert(/onAppUp[\s\S]{0,2200}_healOrientation/.test(mainJs), '应用起来后要立刻校正一次');
+    // 面板方向和设置不一致时不能靠这里修，要交给重启
+    assert(/panelLandscape/.test(engJs), '要能区分「该重启」和「该重锁方向」');
+  });
+
+  await test('Linux 快捷方式：.desktop 要可执行、Exec 要转义、图标必须 PNG', () => {
+    const os = require('os');
+    const shortcut = require('../src/core/shortcut');
+    // Windows 上生成的是 .lnk，Linux 上必须是 .desktop（freedesktop 规范）
+    assert(shortcut.shortcutExt() === (process.platform === 'win32' ? '.lnk' : '.desktop'),
+      '快捷方式扩展名要跟平台走');
+
+    // 直接调 .desktop 写入器验证内容（不依赖当前平台）
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-dt-'));
+    const out = path.join(dir, '测试 应用.desktop');
+    const png = path.join(dir, 'icon.png');
+    fs.writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    try {
+      shortcut.writeDesktopEntry({
+        shortcutPath: out,
+        target: '/opt/ApkStart/ApkStart',
+        args: '--launch "com.example.app"',
+        iconPngPath: png,
+        description: '测试应用',
+      });
+      assert(fs.existsSync(out), '.desktop 必须真的落盘');
+      const body = fs.readFileSync(out, 'utf8');
+      assert(/\[Desktop Entry\]/.test(body), '缺 Desktop Entry 段');
+      assert(/^Type=Application$/m.test(body), 'Type 必须是 Application');
+      // 带空格的路径不加引号会被拆成两个参数，直接启动失败
+      assert(/^Exec=.*"\/opt\/ApkStart\/ApkStart"/m.test(body), 'Exec 里的目标路径要加引号');
+      assert(/com\.example\.app/.test(body), 'Exec 要带上 --launch 的包名');
+      assert(/^Icon=.*icon\.png$/m.test(body), '图标要用 PNG 绝对路径（ICO 在 Linux 无效）');
+      // .desktop 不带执行位，很多桌面环境会当普通文档
+      if (process.platform !== 'win32') {
+        const mode = fs.statSync(out).mode & 0o777;
+        assert((mode & 0o100) !== 0, '.desktop 必须有可执行位');
+      }
+    } finally {
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+    }
+  });
+
+  await test('横屏必须「正立」：面板定方向、rotation 锁 0、忽略应用的方向请求', () => {
+    const root = path.join(__dirname, '..');
+    const adbJs = fs.readFileSync(path.join(root, 'src', 'core', 'adb.js'), 'utf8');
+
+    // 实机踩出来的三段式（缺任何一段画面都会躺倒 90°）：
+    //  1) 物理面板换方向（hw.lcd.width/height 互换 + 重启）—— 见 doctor.lcdFor
+    //  2) 逻辑方向锁 **0**：面板已经是横的，再锁 1 会把横面板转成竖逻辑空间
+    //  3) 忽略应用自己的方向请求：红果这类应用声明 portrait，系统照办后
+    //     init=1280x720 的横面板会变成 cur=720x1280 的竖逻辑空间
+    const setOri = adbJs.slice(adbJs.indexOf('async setOrientation'), adbJs.indexOf('async resetDisplayOverrides'));
+    assert(/wm user-rotation lock 0/.test(setOri),
+      'setOrientation 必须锁 rotation 0（锁 1 会让横面板躺倒）');
+    assert(!/user-rotation lock \$\{landscape \? 1/.test(setOri),
+      '不能再按 landscape 锁 1 —— 那是「只有竖面板可旋转」时代的写法');
+    assert(/wm set-ignore-orientation-request/.test(setOri),
+      '必须忽略应用的屏幕方向请求，否则竖屏锁定的应用会躺倒');
+
+    const reset = adbJs.slice(adbJs.indexOf('async resetDisplayOverrides'));
+    assert(/wm user-rotation lock 0/.test(reset.slice(0, 800)), 'resetDisplayOverrides 也要锁 0');
+    assert(/wm set-ignore-orientation-request/.test(reset.slice(0, 800)),
+      'resetDisplayOverrides 也要按模式设置 ignore-orientation');
+  });
+
+  await test('关闭应用必须有入口：右键菜单 + 托盘 + IPC 一个都不能少', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    const preloadJs = fs.readFileSync(path.join(root, 'src', 'preload.js'), 'utf8');
+    const uiJs = fs.readFileSync(path.join(root, 'src', 'ui', 'app.js'), 'utf8');
+
+    // 主进程要有 app:stop（以前压根没有，endApp 只在窗口关闭时触发，
+    // 而独立窗口模式那个窗口是隐藏的 → 应用一起来就关不掉）
+    assert(/ipcMain\.handle\('app:stop'/.test(mainJs), '缺少 app:stop IPC');
+    // 渲染进程要能调到
+    assert(/stop:\s*\(pkg\)\s*=>\s*invoke\('app:stop'/.test(preloadJs), 'preload 要暴露 stop');
+    // 右键菜单要有这一项
+    assert(/key:\s*'stop'/.test(uiJs), '右键菜单缺少「关闭应用」');
+    assert(/case 'stop':/.test(uiJs), '右键菜单没有处理 stop');
+    // 独立窗口模式主界面是隐藏的，托盘是唯一随时可达的入口
+    assert(/关闭当前应用/.test(mainJs), '托盘菜单缺少「关闭当前应用」');
+    // 关掉后要刷新「运行中」标记
+    assert(/apps:changed/.test(mainJs) && /apps:changed/.test(uiJs),
+      '关闭后要发 apps:changed 并让界面刷新');
+
+    // 修复：托盘和 IPC 必须共用同一条 stopApp 路径，不在两处写同样的逻辑
+    assert(/async function stopApp/.test(mainJs), '必须有统一的 stopApp 函数');
+    assert(/ipcMain\.handle\('app:stop'[\s\S]{0,200}stopApp/.test(mainJs),
+      'app:stop IPC 必须委托给 stopApp');
+    assert(/stopApp\(pkg\)\.then/.test(mainJs) || /stopApp\(pkg\)/.test(mainJs),
+      '托盘菜单也必须调 stopApp');
+    // 关闭后必须清 currentAppPkg，否则托盘还显示「关闭当前应用（xxx）」
+    assert(/currentAppPkg === target/.test(mainJs) || /currentAppPkg = null/.test(mainJs),
+      'stopApp 必须清 currentAppPkg');
+    // 独立窗口模式必须先藏模拟器窗口再关壳窗口（反了会在桌面闪一下）
+    assert(/detached[\s\S]{0,200}agent\.hide/.test(mainJs),
+      '独立窗口模式先 hide 再 close');
+    // 外部关闭（Alt+F4）也要清 currentAppPkg
+    assert(/onCloseApp[\s\S]{0,300}currentAppPkg = null/.test(mainJs) || /onCloseApp[\s\S]{0,300}currentAppPkg === pkg/.test(mainJs),
+      'onCloseApp 也要清 currentAppPkg');
+  });
+
+  await test('旧版本清理：能发现任意位置的 ApkStart 目录，且绝不碰当前运行版本', () => {
+    const os = require('os');
+    const leftovers = require('../src/core/leftovers');
+    const np = (p) => { try { return path.resolve(p).toLowerCase(); } catch (_) { return String(p).toLowerCase(); } };
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-left-'));
+    try {
+      // 造三个「旧版本」目录 + 一个「当前版本」目录，每个里面放一个假的 ApkStart.exe
+      const mk = (name) => {
+        const d = path.join(root, name);
+        fs.mkdirSync(d, { recursive: true });
+        fs.writeFileSync(path.join(d, 'ApkStart.exe'), 'fake-exe');
+        return d;
+      };
+      const old1 = mk('ApkStart-v0.3.9-win64-portable');
+      const old2 = mk('ApkStart-win64-portable.prev-2026-01-01T00-00-00-000Z'); // 打包备份残留
+      const curDir = mk('ApkStart-v0.5.0-win64-portable');
+
+      const r = leftovers.scan({ installDir: curDir, dataDir: root, avdHome: '' });
+      const found = r.items.filter((i) => i.kind === 'dir').map((i) => np(i.path));
+
+      assert(found.includes(np(old1)), '普通旧版本目录没被发现');
+      // .prev-* 是 pack.js 每次改名保留的备份，以前完全清不掉，现在必须能发现
+      assert(found.includes(np(old2)), '.prev 打包备份残留没被发现');
+      // 关键安全约束：当前正在运行的那个绝不能出现在待删列表里
+      assert(!found.includes(np(curDir)), '当前运行版本被当成旧版本（危险）');
+    } finally {
+      try { fs.rmSync(root, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+    }
+  });
+
+  await test('切换应用必须先干净关掉上一个，否则旧应用 ANR / _activeApps 残留', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+
+    // openAppWindow 现在必须是 async：切换时要 await 把旧应用停干净再开新的。
+    assert(/async function openAppWindow/.test(mainJs), 'openAppWindow 必须 async（要等旧应用收尾）');
+    // 调用处也必须 await，否则 close/endApp 和新应用启动并发 → 抢前台 → ANR
+    assert(/await openAppWindow\(/.test(mainJs), 'runLaunch 里必须 await openAppWindow');
+
+    // 核心：切到「另一个」应用时，必须先 endApp(旧) —— 只收窗口不停进程是 bug 根源
+    const fn = mainJs.slice(mainJs.indexOf('async function openAppWindow'));
+    const body = fn.slice(0, fn.indexOf('\n}', fn.indexOf('currentAppPkg = pkg')));
+    assert(/currentAppPkg !== pkg/.test(body), '只在切换到不同应用时才关旧的（同应用走复用）');
+    assert(/runtime\.endApp\(prev/.test(body) || /runtime\.endApp\(currentAppPkg/.test(body),
+      '切换时必须真正 endApp 旧应用（force-stop + 移出 _activeApps）');
+    // appWin.open() 内部用的是 close({keepApp:true})，不 endApp；
+    // 所以外层必须显式补上 endApp，不能指望 open 里的 close。
+    assert(/close\(\{ keepApp: true \}\)/.test(body) && /endApp/.test(body),
+      '先 park 画面（close keepApp）再 endApp 停进程，顺序要对');
+
+    // 窗口已不在但进程还挂在 _activeApps 的情况也要收尾
+    assert(/else if \(currentAppPkg && currentAppPkg !== pkg\)/.test(body),
+      '窗口不在时也要清掉残留的 _activeApps 进程');
+  });
+
+  await test('自动全屏和横屏必须是活的：设置项得有消费方，且启动时校正面板方向', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    const htmlJs = fs.readFileSync(path.join(root, 'src', 'ui', 'index.html'), 'utf8');
+    const uiJs = fs.readFileSync(path.join(root, 'src', 'ui', 'app.js'), 'utf8');
+    const emuJs = fs.readFileSync(path.join(root, 'src', 'core', 'emulator.js'), 'utf8');
+
+    // autoFullscreenOnLaunch 以前只在默认设置里声明，没有任何代码读它 —— 死开关。
+    const uses = (mainJs.match(/autoFullscreenOnLaunch/g) || []).length;
+    assert(uses > 0, 'autoFullscreenOnLaunch 必须真的被读（不能只是声明）');
+    assert(/fullscreen:[\s\S]{0,200}autoFullscreenOnLaunch/.test(mainJs),
+      '自动全屏要参与 openAppWindow 的 fullscreen 判定');
+
+    // 设置页要能改这两项
+    assert(/setAutoFullscreen/.test(htmlJs), '设置页缺少「自动全屏」开关');
+    assert(/setLandscape/.test(htmlJs), '设置页缺少「屏幕方向」开关');
+    assert(/setAutoFullscreen'\)\.addEventListener/.test(uiJs), '自动全屏开关没接事件');
+    assert(/setLandscape'\)\.addEventListener/.test(uiJs), '屏幕方向开关没接事件');
+
+    // 横屏只能靠物理面板 + 重启；启动时必须先校正，否则会躺倒
+    assert(/panelLandscape/.test(emuJs), 'emulator 需要能读出当前面板方向');
+    assert(/orientation mismatch/.test(mainJs), '启动前要检查面板方向是否与设置一致');
+    assert(/reloadApp:\s*false/.test(mainJs), '校正方向时不能顺手再启动一次应用（会重复拉起）');
+
+    // 独立窗口模式下「全屏」要作用在模拟器窗口上，maximize 一个隐藏窗口没有意义
+    const appwinJs = fs.readFileSync(path.join(root, 'src', 'core', 'appwin.js'), 'utf8');
+    assert(/_wantFullscreen/.test(appwinJs), '独立窗口模式要记住全屏意图');
+    assert(/if \(this\._wantFullscreen\)/.test(appwinJs), 'openDetached 要按全屏铺满可用区');
+
+    // 修复：重启运行时后旧 rt.client 失效，beforeStart 必须返回新的 rt
+    const instJs = fs.readFileSync(path.join(root, 'src', 'core', 'installer.js'), 'utf8');
+    assert(/beforeStart[\s\S]{0,400}replaced[\s\S]{0,200}replaced\.client/.test(instJs),
+      'installer.launch 要接受 beforeStart 返回的新 rt');
+    assert(/return newRt/.test(mainJs) || /return rt/.test(mainJs.slice(mainJs.indexOf('restartForOrientation'))),
+      'restartForOrientation 要返回新的 rt 给 beforeStart');
+
+    // 修复：独立窗口模式横屏时 _panelRatio 要按面板方向校正
+    assert(/this\.state\.landscape.*b\.height > b\.width/.test(appwinJs)
+      || /landscape.*height.*width/.test(appwinJs),
+      '_panelRatio 横屏时要校正比值');
+  });
+
+  await test('点开应用要尽早出画面：进程一出现就接窗口，不等 4 秒观察期', () => {
+    const root = path.join(__dirname, '..');
+    const instJs = fs.readFileSync(path.join(root, 'src', 'core', 'installer.js'), 'utf8');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+
+    // 实机测出来的：进程在 2 秒时就出现了，但我们为了「确认不会马上崩」又等了 4 秒
+    // 才把窗口接上去，用户看到的就是「点了没反应」。改成进程一出现就接。
+    assert(/onAppUp/.test(instJs), 'installer.launch 需要 onAppUp 回调');
+    assert(/if \(!seen && typeof onAppUp === 'function'\)/.test(instJs),
+      'onAppUp 必须在「第一次看到进程」时触发，且只触发一次');
+
+    // 主进程要接这个回调，并且是并行接（不 await），否则又变成串行等待
+    assert(/onAppUp:\s*\(\)\s*=>/.test(mainJs), 'main.js 要传 onAppUp');
+    const block = mainJs.slice(mainJs.indexOf('onAppUp: () =>'), mainJs.indexOf('beforeStart:'));
+    assert(/attachAppWindow\(\)/.test(block), 'onAppUp 里要立刻接画面');
+    assert(!/await attachAppWindow\(\)/.test(block),
+      'onAppUp 里不能 await 接画面（会和存活判定串行，等于没优化）');
+
+    // 提前接过了就不能再在后面重复接一次 —— 独立窗口模式下会把刚摆好的窗口
+    // 再隐藏/显示一遍，画面会闪。
+    assert(/attachDoneEarly/.test(mainJs), '要记住是否已经提前接过画面');
+    assert(/if \(attachDoneEarly\)/.test(mainJs), '最终判定要跳过重复接画面');
+
+    // 存活观察期本身不能删：它是防「闪一下就崩」的兜底
+    assert(/aliveSince >= 4000/.test(instJs), '4 秒存活观察期要保留（防闪崩）');
+  });
+
+  await test('虚拟机联网：AVD 必须开虚拟 Wi-Fi，且能主动重连「不会自动连」的热点', () => {
+    const root = path.join(__dirname, '..');
+    const emuJs = fs.readFileSync(path.join(root, 'src', 'core', 'emulator.js'), 'utf8');
+    const engineJs = fs.readFileSync(path.join(root, 'src', 'core', 'engine.js'), 'utf8');
+
+    // API 34 的 Play Store 镜像上网走 wlan0（netsim 虚拟 Wi-Fi），不是 eth0。
+    // config.ini 少了 hw.wifi，wlan0 就永远 NO-CARRIER，应用里一直「网络错误」。
+    assert(/['"]hw\.wifi=yes['"]/.test(emuJs), 'config.ini 必须写 hw.wifi=yes');
+
+    // 实机根因：AndroidWifi 会落成「Saved / Won't automatically connect」，
+    // 开机后不自动连接。shell 又没有 NETWORK_SETTINGS 权限，cmd wifi
+    // connect-network 会抛 SecurityException，所以只能走 UI 点一下。
+    assert(/async repairWifi/.test(emuJs), '需要有主动重连 Wi-Fi 的能力');
+    assert(/WIFI_SETTINGS/.test(emuJs), '重连需要拉起 Wi-Fi 设置页');
+    assert(/uiautomator dump/.test(emuJs), '重连要靠 uiautomator 找到热点再点');
+    // 连上之后还要把「联网验证」探针换成国内可达的端点，否则系统一直给网络打「!」，
+    // 部分应用据此判定离线、拒绝加载内容。
+    assert(/captive_portal_http_url/.test(emuJs), '需要把联网验证探针改成国内可达端点');
+    // 明令禁止用 connect-network 当主方案（权限不够，必然失败）。
+    // 只看真正的代码行——注释里提到它是在解释为什么不用。
+    const emuCode = emuJs.split('\n')
+      .map((l) => l.replace(/\/\/.*$/, ''))
+      .filter((l) => l.trim() && !/^\s*(\*|\/\*)/.test(l))
+      .join('\n');
+    assert(!/cmd wifi connect-network/.test(emuCode), 'shell 没有 connect-network 权限，不能用它');
+
+    // 修复必须从轻到重：先重连，再冷启动，最后才清数据
+    const repair = engineJs.slice(engineJs.indexOf('async repairNetwork'));
+    const repairBody = repair.slice(0, repair.indexOf('async ', 10) > 0 ? undefined : undefined);
+    assert(/repairWifi/.test(repairBody), 'repairNetwork 应先尝试轻量的 Wi-Fi 重连');
+    const wifiAt = repairBody.indexOf('repairWifi');
+    const wipeAt = repairBody.indexOf('forceWipeOnNextStart');
+    assert(wifiAt > -1 && wipeAt > -1 && wifiAt < wipeAt,
+      '顺序必须是：先重连 Wi-Fi，最后才重置数据（不能一上来就清用户数据）');
+
+    // ensureNetwork 也要先试轻量修复，别直接冷启动
+    const ensure = engineJs.slice(engineJs.indexOf('async ensureNetwork'));
+    const ensureBody = ensure.slice(0, ensure.indexOf('async repairNetwork'));
+    const eWifi = ensureBody.indexOf('repairWifi');
+    const eBoot = ensureBody.indexOf('_netColdBootTried');
+    assert(eWifi > -1 && eBoot > -1 && eWifi < eBoot,
+      'ensureNetwork 应先尝试重连 Wi-Fi，再考虑冷启动');
+
+    // 启动路径（installer）上也要做一次，否则每次点开应用都先吃一个「没网」的应用。
+    // 注意这里只允许非破坏性的 repairWifi，绝不能出现 ensureNetwork（会冷启动）。
+    const instJs = fs.readFileSync(path.join(root, 'src', 'core', 'installer.js'), 'utf8');
+    assert(/repairWifi/.test(instJs), '启动应用前应尝试修复 Wi-Fi');
+    assert(!/\.ensureNetwork\(/.test(instJs), '启动路径不能调 ensureNetwork（会停虚拟机冷启动）');
+    // 必须挂在 engine（this.runtime）上：rt 是 ensure() 的返回对象，只有 client。
+    // 写成 rt.repairWifi 会是 undefined，调用即抛错又被 catch 吞掉，等于没修。
+    assert(/this\.runtime\.repairWifi\(/.test(instJs), 'repairWifi 要挂在 engine（this.runtime）上');
+    assert(!/\brt\.repairWifi\(/.test(instJs), 'rt 是 ensure() 的返回对象，上面没有 repairWifi');
+    // engine 上这个转发方法必须真的存在，否则 installer 里调用同样是 undefined
+    assert(/async repairWifi\(/.test(engineJs), 'engine 必须实现 repairWifi 转发');
   });
 
   await test('WinAgent.setHook(false) 在默认状态下不会拉起 PowerShell 代理', async () => {
@@ -1527,6 +2033,78 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
     }
   });
 
+  await test('只读运行时目录（MSIX 包内）：可写数据必须改道用户数据目录', () => {
+    const fs2 = require('fs');
+    const os2 = require('os');
+    const tmp = fs2.mkdtempSync(path.join(os2.tmpdir(), 'ro-root-'));
+    const oldAppData = process.env.APPDATA;
+    process.env.APPDATA = path.join(tmp, 'appdata');
+    try {
+      const store = require('../src/core/store');
+      const { Provisioner } = require('../src/core/provision');
+      // 造一个「不可写」的 root：把中间一级做成普通文件，mkdir 必然 EEXIST/ENOTDIR
+      const blocker = path.join(tmp, 'blocker');
+      fs2.writeFileSync(blocker, 'x');
+      const roRoot = path.join(blocker, 'rt');
+      store.saveSettings({ runtime: { dir: roRoot } });
+      const p = new Provisioner(path.join(__dirname, '..'));
+      const paths = p.paths();
+      assert(paths.rootWritable === false, '只读目录要被识别成不可写');
+      // 关键：镜像必须展开到用户数据目录，而不是包内（包内只读，展开会失败）
+      assert(paths.sysImgRoot === path.join(store.DATA_DIR, 'system-images'),
+        `只读时应落在数据目录，实际 ${paths.sysImgRoot}`);
+      assert(paths.tmp.toLowerCase().startsWith(store.DATA_DIR.toLowerCase()), '_tmp 也要改道');
+      assert(paths.avdHome.toLowerCase().startsWith(store.DATA_DIR.toLowerCase()), 'AVD 也必须在可写目录');
+      // 可执行文件仍然指向包内（这样才有包身份，%APPDATA% 虚拟化视图才和父进程一致）
+      assert(paths.emulatorExe === path.join(roRoot, 'emulator', 'emulator.exe'), 'emulator 仍从包内运行');
+      assert(paths.adbExe === path.join(roRoot, 'platform-tools', 'adb.exe'), 'adb 仍从包内运行');
+      // ensureDirs 不能因为 root 只读就抛错
+      p.ensureDirs();
+    } finally {
+      if (oldAppData === undefined) delete process.env.APPDATA; else process.env.APPDATA = oldAppData;
+      fs2.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  await test('包内压缩镜像必须算「已就位」，否则装完还会联网重下 1.5GB', () => {
+    const fs2 = require('fs');
+    const os2 = require('os');
+    const tmp = fs2.mkdtempSync(path.join(os2.tmpdir(), 'packed-img-'));
+    const oldAppData = process.env.APPDATA;
+    process.env.APPDATA = path.join(tmp, 'appdata');
+    const sparse = (file, size) => {
+      fs2.mkdirSync(path.dirname(file), { recursive: true });
+      fs2.writeFileSync(file, '');
+      fs2.truncateSync(file, size);   // 稀疏文件：不真占盘，只是体积够大
+    };
+    try {
+      const store = require('../src/core/store');
+      const { Provisioner } = require('../src/core/provision');
+      // 模拟完整版安装包 / 商店 MSIX：运行时目录里只有 .xz，没有展开的 system.img
+      const root = path.join(tmp, 'rt');
+      const dir = path.join(root, 'system-images', 'android-34', 'google_apis_playstore', 'x86_64');
+      sparse(path.join(dir, 'system.img.xz'), 320 * 1024 * 1024);
+      fs2.writeFileSync(path.join(dir, 'kernel-ranchu'), 'x');
+      store.saveSettings({ runtime: { dir: root } });
+      // appRoot 用空目录，避免被仓库里已展开的 engine/system-images 干扰
+      const p = new Provisioner(path.join(tmp, 'empty-app'));
+      const sys = p.systemImageInfo();
+      assert(sys.ok === true, '压缩镜像要算就位（否则 autoDeploy 会去下载）');
+      assert(sys.compressed === true, '要标记「还需展开一次」');
+      assert(String(sys.dir).toLowerCase().startsWith(root.toLowerCase()), '应指向包内位置');
+      const play = p.playImageInfo();
+      assert(play.ok === true && play.compressed === true, '兼容镜像同理');
+
+      // 展开后（有了 system.img）要变成 compressed=false，且优先用展开的那份
+      sparse(path.join(dir, 'system.img'), 320 * 1024 * 1024);
+      const after = p.systemImageInfo();
+      assert(after.ok === true && after.compressed === false, '展开后不应再标记为压缩版');
+    } finally {
+      if (oldAppData === undefined) delete process.env.APPDATA; else process.env.APPDATA = oldAppData;
+      fs2.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   console.log('\n[资源策略 / 磁盘分配 / 日志上限]');
 
   await test('资源策略一处切换，自动翻译成 vCPU/优先级/分辨率', () => {
@@ -1704,6 +2282,290 @@ const { AdbClient, friendlyInstallError, friendlyLaunchError } = require('../src
     assert(parseResolvedActivity('com.phoenix.read', out)
       === 'com.phoenix.read/com.dragon.read.pages.splash.SplashActivity', '应跳过空行取到最后一行组件');
     assert(parseResolvedActivity('com.other', out) === '', '别的包名不能拿来用');
+  });
+
+  await test('单个应用窗口：独立模式下壳窗口绝不能被显示出来', () => {
+    const root = path.join(__dirname, '..');
+    const appwin = fs.readFileSync(path.join(root, 'src', 'core', 'appwin.js'), 'utf8');
+    // maximize() 会把 show:false 的 BrowserWindow 直接显示出来 —— 这是
+    // 「打开应用出现多个窗口」的直接成因之一。
+    assert(/fullscreen && !this\.detachedMode\) this\.win\.maximize\(\)/.test(appwin),
+      '独立窗口模式不能 maximize 壳窗口（会凭空显示一个黑窗口）');
+    assert(/if \(this\.detachedMode\) this\.agent\.show\(\)/.test(appwin),
+      '独立模式下重复点同一个应用要把模拟器窗口抬到前面，而不是显示壳窗口');
+    // ready-to-show 里也不能随便 show：只有在 showWhileWaiting（切换应用、没有
+    // 开机动画兜底）时才允许先把这块「正在打开…」的壳显示出来。
+    const readyIdx = appwin.indexOf("once('ready-to-show'");
+    assert(readyIdx > 0 && /if \(this\.detachedMode && !this\._showWhileWaiting\) return;/
+      .test(appwin.slice(readyIdx, readyIdx + 600)),
+    '独立模式下 ready-to-show 默认必须直接 return');
+  });
+
+  await test('开机动画：splash 状态必须是模块级，否则永远关不掉', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    // runLaunch / autoDeploy 定义在 whenReady 回调**外面**，回调里 const 的
+    // splashDone 它们根本看不到（typeof 恒为 'undefined'）—— 曾经导致
+    // 480x360 的 alwaysOnTop 开机动画一直钉在屏幕中央。
+    assert(/^let splashWin = null;$/m.test(mainJs), 'splashWin 必须是模块级 let');
+    assert(/^let splashDone = \(\) => \{\};$/m.test(mainJs), 'splashDone 必须是模块级 let');
+    assert(/^let splashProgress = \(\) => \{\};$/m.test(mainJs), 'splashProgress 必须是模块级 let');
+    assert(!/const splashDone = \(\) =>/.test(mainJs), '不能再在 whenReady 里用 const 覆盖');
+    // 保险丝：splash 自己没关掉时主进程强关
+    assert(/setTimeout\(\(\) => \{[\s\S]{0,160}splashWin\.close\(\);/.test(mainJs),
+      'splashDone 之后要有一道强关保险丝');
+  });
+
+  await test('多窗口：启动应用要先收起管理窗口再开应用窗口', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    const launchIdx = mainJs.indexOf('async function runLaunch(');
+    const body = mainJs.slice(launchIdx, launchIdx + 1600);
+    const hideIdx = body.indexOf('mainWindow.hide()');
+    const openIdx = body.indexOf('openAppWindow(pkg');
+    assert(hideIdx > 0 && openIdx > 0, '两个调用都要在 runLaunch 里');
+    assert(hideIdx < openIdx, 'mainWindow.hide() 必须在 openAppWindow 之前（否则会同时看到两个窗口）');
+  });
+
+  await test('横竖屏：面板方向必须跟应用声明一致，否则只会信箱化', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    const apkJs = fs.readFileSync(path.join(root, 'src', 'core', 'apk.js'), 'utf8');
+    const storeJs = fs.readFileSync(path.join(root, 'src', 'core', 'store.js'), 'utf8');
+    const installerJs = fs.readFileSync(path.join(root, 'src', 'core', 'installer.js'), 'utf8');
+
+    assert(/function wantLandscapeFor\(pkg\)/.test(mainJs), '要有「这个应用该用哪个方向」的判定');
+    assert(/orientationMode/.test(mainJs), '要读设置里的方向策略');
+    assert(/orientationOverride/.test(mainJs), '单应用方向覆盖要生效');
+    // 启动路径要用它，而不是裸的 displaySettings().landscape
+    assert(/const wantLand = wantLandscapeFor\(pkg\)/.test(mainJs), 'beforeStart 要按应用方向判定');
+    assert(/const land = wantLandscapeFor\(pkg\)/.test(mainJs), 'openAppWindow 要按应用方向开窗口');
+    // 离线从 APK 清单算方向
+    assert(/function detectOrientation\(/.test(apkJs), '要从 APK 清单离线判断应用方向');
+    assert(/orientation,/.test(apkJs), 'parseApk 要返回 orientation');
+    assert(/orientation: meta\.orientation/.test(installerJs), '安装时要把方向存进 apps.json');
+    assert(/orientationMode: 'auto'/.test(storeJs), '默认策略是跟随应用');
+    // 老数据回填：不补就还是黑边
+    assert(/orientation backfill/.test(mainJs), '老版本装的应用要回填方向');
+  });
+
+  await test('横竖屏：方向不一致触发的重启不能把启动打断', () => {
+    const root = path.join(__dirname, '..');
+    const installerJs = fs.readFileSync(path.join(root, 'src', 'core', 'installer.js'), 'utf8');
+    // beforeStart 会返回新的 rt，以前这里写的是 const rt，一旦真走重启分支就
+    // 抛 "Assignment to constant variable."，整个启动失败。
+    assert(/let rt = await this\.runtime\.ensure\(\{ onLog \}\)/.test(installerJs),
+      'rt 必须是 let，否则重启换 client 时会崩');
+    assert(/if \(replaced && replaced\.client\) rt = replaced;/.test(installerJs), '要接受新的 rt');
+  });
+
+  await test('切换应用不能留空屏：独立模式下等待期间要显示壳窗口', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    const appwin = fs.readFileSync(path.join(root, 'src', 'core', 'appwin.js'), 'utf8');
+    // 独立窗口模式（默认）下壳窗口平时不显示；切换应用到另一个方向会重启运行时
+    // 约 40 秒，这期间如果什么都不显示，用户会以为程序崩了。
+    assert(/showWhileWaiting: detached && !splashVisible/.test(mainJs),
+      '独立模式且没有开机动画时，必须 showWhileWaiting');
+    assert(/splashVisible = !!\(splashWin && !splashWin\.isDestroyed\(\)\)/.test(mainJs),
+      '要靠 splash 是否在显示来决定由谁负责告诉用户「正在等」');
+    assert(/const willRestart = land !== !!displaySettings\(\)\.landscape/.test(mainJs),
+      '要能预判「这次会重启」');
+    assert(/if \(this\.detachedMode && !this\._showWhileWaiting\) return;/.test(appwin),
+      'ready-to-show 只在 showWhileWaiting 时才显示壳窗口');
+    assert(mainJs.includes("t('v058.m0000'") && /重启安卓环境/.test(zhMessages['v058.m0000']),
+      '提示文案要说清为什么慢');
+  });
+
+  await test('标题要在 show 之前设，否则会闪上一个应用的名字', () => {
+    const root = path.join(__dirname, '..');
+    const appwin = fs.readFileSync(path.join(root, 'src', 'core', 'appwin.js'), 'utf8');
+    const start = appwin.indexOf('async openDetached(');
+    const body = appwin.slice(start, start + 2000);
+    const titleIdx = body.indexOf('this.agent.setTitle(');
+    const showIdx = body.indexOf('this.agent.show()');
+    assert(titleIdx > 0 && showIdx > 0, '两个调用都要在 openDetached 里');
+    assert(titleIdx < showIdx, 'setTitle 必须在 show 之前（代理缓存着上次的标题）');
+  });
+
+  await test('网络体检不能一次不过就叫人重置数据', () => {
+    const root = path.join(__dirname, '..');
+    const emuJs = fs.readFileSync(path.join(root, 'src', 'core', 'emulator.js'), 'utf8');
+    // Wi-Fi 关联比 sys.boot_completed 晚 5~20 秒，查一次就报「没有网络」等于每次
+    // 冷启动都误报；而以前的补救建议是「重置安卓数据」（会删掉已装应用）。
+    assert(/checkNetwork\('', \{ waitMs: \d+, interval: \d+ \}\)/.test(emuJs),
+      '开机后的网络体检要给等待窗口，不能查一次就下结论');
+    const boot = emuJs.slice(emuJs.indexOf('运行时就绪'));
+    const warn = boot.slice(0, 4000);
+    // 只看代码行：上面解释「以前这里建议重置数据」的注释不算
+    const warnCode = warn.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+    assert(!/重置安卓数据/.test(warnCode), '这条提示不能建议「重置安卓数据」（会丢已装应用）');
+    assert(/暂时没连上网/.test(warnCode), '要改成不吓人、不误导的说法');
+  });
+
+  await test('开机时那个控制台黑窗要用高频通道压掉', () => {
+    const root = path.join(__dirname, '..');
+    const ps1 = fs.readFileSync(path.join(root, 'src', 'core', 'win', 'agent.ps1'), 'utf8');
+    // emulator 拉起 qemu 时 Windows 会新建一个控制台窗口（Win11 上是 Windows Terminal），
+    // 只活 200~300ms；主巡检 250ms 一轮会漏。
+    assert(/_consoleSweep/.test(ps1), '要有独立的控制台扫描时间戳');
+    assert(/now - _consoleSweep > \(_perfMode \? 200 : 100\)/.test(ps1), '前 15 秒要 100ms 一轮扫控制台');
+    assert(/now - _bootHideStart < 15000/.test(ps1), '高频通道只在开机窗口内跑，避免长期烧 CPU');
+    // 必须是「控制台类窗口 + 标题命中运行时路径」，不能退回按 pid 白名单
+    assert(/static void HideConsoleWindows\(\)/.test(ps1) && /IsOurConsole\(h\)/.test(ps1),
+      '控制台归属要靠 IsOurConsole（conhost 的 pid 不是 emulator 的）');
+  });
+
+  await test('重启换面板后不能「复用」一台已经关掉的模拟器', () => {
+    const root = path.join(__dirname, '..');
+    const emuJs = fs.readFileSync(path.join(root, 'src', 'core', 'emulator.js'), 'utf8');
+    // emulator.exe 只是启动器，spawn 完 qemu 自己就退出了，但 this.proc 会一直留着
+    // （killed 仍是 false）。只看它 = 把已经关掉的机器当成还活着：
+    // restartForOrientation 关掉机器后紧接着 ensure() → start() 直接 reused，
+    // 调用方拿着死掉的 serial 去 adb → `device not found`，切换应用直接失败。
+    const reuse = emuJs.slice(emuJs.indexOf('async start('), emuJs.indexOf('async start(') + 900);
+    assert(/_consoleAlive\(\)/.test(reuse), 'start() 的复用分支必须再确认控制台端口上真有机器');
+    assert(/this\.proc = null;/.test(reuse), '确认没在跑就把 proc 清掉，走真正的开机流程');
+    // stop() 关干净后必须丢掉启动器句柄，否则 running() 永远为 true
+    const stopFn = emuJs.slice(emuJs.indexOf('async stop('), emuJs.indexOf('async stop(') + 1800);
+    assert(/killAttempt\(\)[\s\S]{0,200}this\.proc = null;/.test(stopFn), 'stop() 收尾要清掉 this.proc');
+  });
+
+  await test('Windows Terminal 弹出的开机黑框也要能认出来', () => {
+    const root = path.join(__dirname, '..');
+    const ps1 = fs.readFileSync(path.join(root, 'src', 'core', 'win', 'agent.ps1'), 'utf8');
+    // Win11 把默认控制台宿主换成 Windows Terminal 后，qemu 的控制台窗口属于
+    // WindowsTerminal.exe：pid/父进程链/标题全都不是我们的，只能靠「开机前不存在」
+    assert(/static void SnapshotConsoles\(\)/.test(ps1), '开机前要记下已有控制台窗口');
+    assert(/_consolesBeforeBoot/.test(ps1), '要有开机前的控制台快照');
+    assert(/now - _bootHideStart < 20000[\s\S]{0,120}_consolesBeforeBoot\.Contains/.test(ps1),
+      '只认「开机后 20 秒内新出现的」控制台窗口');
+    assert(/tl\.IndexOf\("terminal", StringComparison\.Ordinal\) >= 0/.test(ps1),
+      '标题是空或带 terminal 才算可疑（用户已开的终端在快照里）');
+    assert(/SnapshotConsoles\(\);/.test(ps1), 'boothide 时要先拍快照');
+  });
+
+  await test('启动要串行化：连点/切换应用不能并发跑两遍', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    // 一次启动最长 80 秒（换面板重启 + 冷启动）。以前这期间再点一个应用会真的
+    // 并发跑第二遍：openAppWindow 把正在启动的应用关掉，虚拟机又在重启，
+    // 两边一起失败，日志里是 `cmd: Can't find service: activity`。
+    assert(/let launchInFlight = null;/.test(mainJs), '要有进行中启动的记录');
+    assert(/if \(launchInFlight\.pkg === pkg\)[\s\S]{0,120}return launchInFlight\.promise;/.test(mainJs),
+      '同一个应用连点要复用进行中的那次');
+    assert(/launch queued \$\{pkg\}/.test(mainJs), '换应用要排队而不是把运行时抽走');
+    assert(/async function launchOne\(pkg\)/.test(mainJs), '原主体要拆成 launchOne');
+    assert(/launchInFlight = entry;/.test(mainJs), '要在 finally 里清空，避免卡死后续启动');
+  });
+
+  await test('硬件加速：商店版引导用户开 WHPX，安装版一键开启并可退 AEHD', () => {
+    const root = path.join(__dirname, '..');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    const appJs = fs.readFileSync(path.join(root, 'src', 'ui', 'app.js'), 'utf8');
+    const preloadJs = fs.readFileSync(path.join(root, 'src', 'preload.js'), 'utf8');
+
+    // 1) 真正让模拟器用上 WHPX 的功能是 HypervisorPlatform（虚拟机平台是 WSL2 的），
+    //    必须排在最前面开；两个都开一次以覆盖不同机器。
+    assert(/for \(const f of \['HypervisorPlatform', 'VirtualMachinePlatform'\]\)/.test(mainJs),
+      '要先开 HypervisorPlatform（WHPX 真正需要的那个）');
+    // 2) 不能再拿 WinHvPlatform.dll 是否存在当开关：现代 Windows 上它一直都在，
+    //    这样判断会把真正需要开功能的机器挡在门外。
+    const handler = mainJs.slice(mainJs.indexOf("ipcMain.handle('provision:enableVirtualization'"));
+    const handlerBody = handler.slice(0, 4000);
+    assert(!/if \(hv\.dll\) \{/.test(handlerBody), '不能再按 WinHvPlatform.dll 分叉');
+    // 3) 商店（MSIX）版：拿不到提权就退回「手动引导」，而不是弹一个注定失败的 UAC
+    assert(/if \(store\.STORE_BUILD\) \{[\s\S]{0,900}manual: true/.test(handlerBody),
+      '商店版失败时要返回 manual 交给 UI 引导');
+    assert(mainJs.includes("t('v058.m0007')") && /商店版无法自行提权/.test(zhMessages['v058.m0007']),
+      '商店版文案要说明为什么不能自动开');
+    assert(mainJs.includes("t('v058.m0008')") && /虚拟机监控程序平台/.test(zhMessages['v058.m0008']),
+      '要明确写出「Windows 虚拟机监控程序平台」');
+    // 4) 开启成功后必须清掉加速缓存，否则界面还显示旧结论
+    assert(/const whpx = await enableWhpxFeatures\(\);\s*\n\s*runtime\.provisioner\.invalidateEnvCache/.test(mainJs),
+      '开启后要 invalidateEnvCache');
+    // 5) 用户点了「否」要能和真失败区分开（1223 = ERROR_CANCELLED）
+    assert(/1223/.test(mainJs) && /cancelled/.test(mainJs), '要区分 UAC 取消');
+    // 6) 有「Windows 虚拟机监控程序平台」那一项的是经典对话框，不是 ms-settings 页面
+    assert(/optionalfeatures\.exe/.test(mainJs), '要打开 classic optionalfeatures.exe');
+    // 7) UI 要处理 manual / cancelled，并真的去打开那个对话框
+    assert(/r\.manual/.test(appJs) && /api\.openWindowsFeatures/.test(appJs), 'UI 要处理 manual 分支');
+    assert(/openWindowsFeatures: \(\) => invoke\('provision:openWindowsFeatures'\)/.test(preloadJs),
+      'preload 要暴露 openWindowsFeatures');
+    // 8) 软件模拟下第一次启动要弹一次系统通知（设置里的自检项用户很可能没看到）
+    assert(/let accelWarned = false;/.test(mainJs) && mainJs.includes("t('v058.m0020')")
+      && /正在以软件模拟运行/.test(zhMessages['v058.m0020']),
+      '软件模拟要提醒一次');
+  });
+
+  await test('打包必须写入 exe 图标/版本，否则资源管理器显示 Electron 默认图标', () => {
+    const root = path.join(__dirname, '..');
+    const packJs = fs.readFileSync(path.join(root, 'build', 'pack.js'), 'utf8');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    const pkg = require(path.join(root, 'package.json'));
+
+    // 直改名出来的 exe 里面还是 Electron：FileDescription=Electron、
+    // ProductName=Electron、CompanyName=GitHub, Inc.、版本 33.4.11，图标也是默认的。
+    assert(/function embedExeMeta\(exe\)/.test(packJs), '要有 exe 元信息写入步骤');
+    assert(/--set-icon/.test(packJs), '要写图标');
+    assert(/--set-file-version/.test(packJs), '要写文件版本');
+    assert(/--set-version-string', 'FileDescription'/.test(packJs), '要写 FileDescription');
+    assert(/--set-version-string', 'ProductName', 'ApkStart'/.test(packJs), 'ProductName 必须是 ApkStart');
+    assert(/embedExeMeta\(exePath\)/.test(packJs), '要在改名之后真的调用');
+    // 找不到 rcedit 时要明确告警，不能静默产出「Electron 图标」的包
+    assert(/找不到 rcedit\.exe/.test(packJs), '缺 rcedit 要告警');
+
+    // 任务栏身份：不设 AppUserModelID，任务栏固定项/通知会落到 "Electron" 上
+    assert(/setAumid\(APP_AUMID\);/.test(mainJs), '启动时要设置 AppUserModelID');
+
+    // 完整版（含运行时）作为一个可交付版本
+    assert(/--full/.test(packJs) && /ApkStart-v\$\{PKG\.version\}-win64-full/.test(packJs),
+      '--full 要产出带版本号的完整版目录');
+    assert(/build', 'runtime'/.test(packJs), '完整版要内置 build/runtime');
+  });
+
+  await test('版本统一：package.json / MSIX 四段号 / 文档包名一致', () => {
+    const root = path.join(__dirname, '..');
+    const pkg = require(path.join(root, 'package.json'));
+    const { msixVersion } = require(path.join(root, 'build', 'msix.js'));
+    const four = msixVersion(pkg.version);
+    assert(/^\d+\.\d+\.\d+\.0$/.test(four), `MSIX 四段版本号格式不对：${four}`);
+    const artifact = `ApkStart_${four}_x64.msix`;
+    for (const f of ['docs/store-listing.md', 'docs/store-msix.md', 'docs/store-upload-walkthrough.md']) {
+      const t = fs.readFileSync(path.join(root, f), 'utf8');
+      assert(t.includes(artifact), `${f} 里应引用当前版本的包名 ${artifact}`);
+    }
+    // exe 的文件版本也要用同一个号（四段），别和 package.json 各说各话
+    const packJs = fs.readFileSync(path.join(root, 'build', 'pack.js'), 'utf8');
+    assert(/\$\{PKG\.version\}\.0/.test(packJs), 'exe 文件版本要跟 package.json 对齐');
+    // 商店包和 exe 用的是同一个版本来源，不该有第二份硬编码版本号
+    const msixJs = fs.readFileSync(path.join(root, 'build', 'msix.js'), 'utf8');
+    assert(/const VERSION = String\(pkg\.version/.test(msixJs), 'MSIX 版本号必须取自 package.json');
+  });
+
+  await test('安卓应用的快捷方式必须用它自己的图标 + 自己的任务栏身份', () => {
+    const root = path.join(__dirname, '..');
+    const installerJs = fs.readFileSync(path.join(root, 'src', 'core', 'installer.js'), 'utf8');
+    const mainJs = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    const shortcutJs = fs.readFileSync(path.join(root, 'src', 'core', 'shortcut.js'), 'utf8');
+
+    // 桌面/开始菜单快捷方式的图标 = 从 APK 里解出来的 <包名>.ico，绝不是 ApkStart 的品牌图
+    assert(/const ico = app\.icoPath && fs\.existsSync\(app\.icoPath\) \? app\.icoPath : undefined;/.test(installerJs),
+      '要用应用自己的 icoPath');
+    assert(/iconIcoPath: ico/.test(installerJs), 'writeShortcut 要拿到应用图标');
+    assert(!/iconIcoPath:\s*(APPICON|appicon|brandIcon)/.test(installerJs), '不能用 ApkStart 的品牌图标');
+    // 每个应用一个 AUMID：任务栏按应用分组，固定项才认得出是哪个应用
+    assert(/appUserModelId: `RoutineMiku\.ApkStart\.\$\{app\.package\}`/.test(installerJs),
+      '每个应用要有自己的 AUMID');
+    // Windows 只在「进程 AUMID == 快捷方式 AUMID」时沿用快捷方式图标，
+    // 所以打开某个应用时要把进程身份切过去，回管理窗口再切回 ApkStart。
+    assert(/const APP_AUMID = 'RoutineMiku\.ApkStart';/.test(mainJs), '要有统一的 AUMID 前缀');
+    assert(/setAumid\(`\$\{APP_AUMID\}\.\$\{pkg\}`\)/.test(mainJs), '开应用窗口前要切到该应用的 AUMID');
+    assert(/function showWindow\(\) \{\s*\n\s*\/\/[^\n]*\n\s*setAumid\(APP_AUMID\);/.test(mainJs),
+      '回管理窗口要切回 ApkStart 的 AUMID');
+    // writeShortcut 必须把 iconIndex 设成 0（ico 里第 0 帧），否则某些尺寸会取错
+    assert(/icon: opt\.iconIcoPath \|\| opt\.target/.test(shortcutJs), '图标路径要能回退到 target');
+    assert(/iconIndex: 0/.test(shortcutJs), 'iconIndex 要是 0');
   });
 
   console.log(results.join('\n'));

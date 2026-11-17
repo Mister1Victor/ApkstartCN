@@ -27,3 +27,6 @@ engine/*.img
 engine/*.qcow2
 tools/platform-tools/adb.exe
 tools/platform-tools/*.dll
+
+# 商店截图脚本的中间产物（可随时重生成）
+docs/store-shots/raw-*.png

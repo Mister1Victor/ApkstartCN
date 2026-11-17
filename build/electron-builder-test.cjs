@@ -9,7 +9,7 @@ const config = yaml.load(fs.readFileSync(path.join(__dirname, '../electron-build
 module.exports = {
   ...config,
   directories: { ...config.directories, output: 'dist/i18n-test' },
-  extraMetadata: { version: '0.4.2-i18n.1' },
+  extraMetadata: { version: `${require('../package.json').version}-i18n.1` },
   extraResources: [],
   publish: null,
 };

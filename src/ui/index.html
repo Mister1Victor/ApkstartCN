@@ -82,6 +82,8 @@
       <button class="status-chip" id="envChip" hidden></button>
     </div>
     <div class="status-right">
+      <span class="status-item status-net" id="statusNet" hidden></span>
+      <span class="sep" id="statusNetSep" hidden></span>
       <span class="status-item" id="statusDevice"></span>
       <span class="sep"></span>
       <span class="status-item" id="statusStats"></span>
@@ -146,7 +148,7 @@
           <label for="setLanguage" data-i18n="settings.language">Language</label>
           <select id="setLanguage">
             <option value="auto" data-i18n="settings.systemLanguage">System language</option>
-            <option value="zh-CN">简体中文</option>
+            <option value="zh-CN" data-i18n="v058.m0153">简体中文</option>
             <option value="pt-BR">Português (Brasil)</option>
             <option value="en">English</option>
           </select>
@@ -196,7 +198,12 @@
         <div class="field">
           <label><span data-i18n="m0522">本机自适应参数</span></label>
           <div class="inline-note" id="autoProfileText"><span data-i18n="m0523">正在检测…</span></div>
-          <span class="sub"><span data-i18n="m0524">内存、核心数、渲染后端、端口、加速方式全部自动选择；启动失败会自动降级重试，不需要手动改。</span></span>
+          <span class="sub"><span data-i18n="v058.m0154">内存、核心数、渲染后端、端口、加速方式全部自动选择；启动失败会自动降级重试，不需要手动改。
+            ApkStart 用</span><b><span data-i18n="v058.m0155">专用 adb 服务端口 5044</span></b><span data-i18n="v058.m0156">（你系统里自己的 adb 是 5037），所以命令行里</span>
+            <code>adb devices</code> <span data-i18n="v058.m0157">看不到这台安卓设备 —— 这是刻意的隔离。想连的话用</span>
+            <code>$env:ANDROID_ADB_SERVER_PORT=5044</code> <span data-i18n="v058.m0158">再执行 adb。
+            注意：别对着 5555 端口手动</span> <code>adb connect</code><span data-i18n="v058.m0159">，那会在正在运行的应用上弹出
+            「允许 USB 调试吗」的系统弹窗。</span></span>
         </div>
         <div class="field">
           <label><span data-i18n="m0525">磁盘总占用（运行时 + 安卓数据 + 缓存）</span></label>
@@ -236,6 +243,57 @@
             <option value="fullscreen" data-i18n="m0544">全屏（铺满屏幕，保持手机比例两侧留黑）</option>
           </select>
           <span class="sub"><span data-i18n="m0545">随时按</span> <b>F11</b> <span data-i18n="m0546">或右键托盘切换；全屏只放大窗口，不改变画面比例，切换不重启应用。</span></span>
+        </div>
+        <div class="field">
+          <label><span data-i18n="v058.m0160">自动全屏</span></label>
+          <select id="setAutoFullscreen">
+            <option value="off" data-i18n="v058.m0161">关闭（按上面选的显示模式走）</option>
+            <option value="on" data-i18n="v058.m0162">打开 · 每次启动应用都自动全屏</option>
+          </select>
+          <span class="sub"><span data-i18n="v058.m0163">打开后，每次点开应用直接铺满屏幕，不用再按 F11。配合下面的「横屏」使用效果最好
+            —— 横屏面板的宽高比本来就贴合屏幕，全屏不会留黑边。</span></span>
+        </div>
+        <div class="field">
+          <label><span data-i18n="v058.m0164">屏幕方向</span></label>
+          <select id="setOrientationMode">
+            <option value="auto" data-i18n="v058.m0165">跟随应用（推荐 · 自动选横竖屏，画面铺满不留黑边）</option>
+            <option value="portrait" data-i18n="v058.m0166">强制竖屏（手机比例，适合刷短视频、看小说）</option>
+            <option value="landscape" data-i18n="v058.m0167">强制横屏（宽屏铺满，适合看剧、玩游戏）</option>
+          </select>
+          <span class="sub"><span data-i18n="v058.m0168">安卓的横竖屏是</span><b><span data-i18n="v058.m0169">虚拟手机面板的真实方向</span></b><span data-i18n="v058.m0170">决定的。面板方向和应用自己声明的方向不一致时，
+            安卓只会给应用中间一条窄画面、两侧补黑 —— 换窗口大小、改分辨率都填不满。
+            「跟随应用」会在安装 APK 时读出应用的方向，启动时自动把面板换成一致的那个，
+            所以红果、墨读这类应用会正立且铺满。方向不对时才重启一次运行时（约十几秒），
+            之后再打开同一方向的应用都是秒进。</span></span>
+        </div>
+        <div class="field">
+          <label><span data-i18n="v058.m0171">平板排版</span></label>
+          <select id="setTabletMode">
+            <option value="on" data-i18n="v058.m0172">打开（推荐 · 逻辑密度 190dpi，sw606dp 走平板排版）</option>
+            <option value="off" data-i18n="v058.m0173">关闭（镜像默认密度，手机排版）</option>
+          </select>
+          <span class="sub"><span data-i18n="v058.m0174">720 宽按 190dpi 算等于 606dp，正好越过 Android 的 600dp 平板断点，
+            红果短剧的双列剧集页、设置页的分栏都只在这个排版下出现。关掉会回到手机排版
+            （字更大、信息更少）。切换后下次打开应用生效。</span></span>
+        </div>
+        <div class="field">
+          <label><span data-i18n="v058.m0175">当前面板方向</span></label>
+          <select id="setLandscape">
+            <option value="portrait" data-i18n="v058.m0176">竖屏面板</option>
+            <option value="landscape" data-i18n="v058.m0177">横屏面板</option>
+          </select>
+          <span class="sub"><span data-i18n="v058.m0178">这是运行时</span><b><span data-i18n="v058.m0179">现在</span></b><span data-i18n="v058.m0180">用的物理面板方向，由上面那条策略自动写入。
+            只有在「强制」模式下它才完全由你决定。</span></span>
+        </div>
+        <div class="field">
+          <label><span data-i18n="v058.m0181">窗口承载方式</span></label>
+          <select id="setWindowEmbed">
+            <option value="embed" data-i18n="v058.m0182">嵌入模式（默认）· 安卓画面嵌在 ApkStart 窗口里，观感统一</option>
+            <option value="detached" data-i18n="v058.m0183">独立窗口 · 由模拟器自己开窗口，避开花屏/黑边/点不准</option>
+          </select>
+          <span class="sub"><span data-i18n="v058.m0184">嵌入模式最像「一个应用一个窗口」，但需要把模拟器的窗口塞进我们自己的窗口，
+            容易在缩放、旋转、多窗口切换时出现黑边或点击错位。独立模式下方向、缩放、输入都由模拟器原生处理，
+            这类问题不会出现，代价是多一个任务栏图标。改动在下次打开应用时生效。</span></span>
         </div>
         <div class="field" id="portraitField">
           <label><span data-i18n="m0547">竖屏画面大小</span></label>
@@ -283,6 +341,21 @@
         </div>
       </div>
 
+      <div class="group">
+        <div class="group-title"><span data-i18n="v058.m0185">键盘映射（游戏手柄）</span></div>
+        <div class="field switch-field">
+          <div>
+            <label><span data-i18n="v058.m0186">启用键盘映射</span></label>
+            <span class="sub"><span data-i18n="v058.m0187">把键盘按键映射成安卓触屏点击/滑动。适合用键盘玩手游（WASD 移动、J/K 技能等）。
+              每个应用可以单独配置，右键应用卡片 → 「按键映射」选择预设模板或自定义。</span></span>
+          </div>
+          <input type="checkbox" id="setKeymapEnabled" class="switch" />
+        </div>
+        <div class="field">
+          <span class="sub" id="keymapHint"><span data-i18n="v058.m0188">当前应用未配置按键映射。右键应用卡片可快速套用预设模板。</span></span>
+        </div>
+      </div>
+
       <div class="group" id="perfGroup">
         <div class="group-title"><span data-i18n="m0566">性能与资源占用</span></div>
         <div class="field">
@@ -314,6 +387,11 @@
               <option value="12">12 GB</option>
               <option value="16">16 GB</option>
               <option value="24">24 GB</option>
+              <option value="32">32 GB</option>
+              <option value="48">48 GB</option>
+              <option value="64" data-i18n="v058.m0189">64 GB（50GB 级游戏）</option>
+              <option value="96">96 GB</option>
+              <option value="128">128 GB</option>
             </select>
           </div>
         </div>
@@ -325,6 +403,26 @@
         </div>
         <div class="field">
           <span class="sub" id="dataNote"><span data-i18n="m0581">正在读取数据分区…</span></span>
+        </div>
+        <div class="field">
+          <label><span data-i18n="v058.m0190">系统语言</span></label>
+          <select id="setLocale">
+            <option value="zh-CN" data-i18n="v058.m0191">简体中文（推荐）</option>
+            <option value="zh-TW" data-i18n="v058.m0192">繁體中文</option>
+            <option value="en-US" data-i18n="v058.m0193">English（镜像原生）</option>
+            <option value="ja-JP" data-i18n="v058.m0194">日本語</option>
+            <option value="ko-KR">한국어</option>
+          </select>
+          <span class="sub"><span data-i18n="v058.m0195">系统设置、权限弹窗、日期格式的语言。开机时注入到虚拟机，</span>
+            <b><span data-i18n="v058.m0196">下次重启运行时生效</span></b><span data-i18n="v058.m0197">。中文输入法不受此项影响，单独在下面开关。</span></span>
+        </div>
+        <div class="field switch-field">
+          <div>
+            <label><span data-i18n="v058.m0198">中文输入法（推荐）</span></label>
+            <span class="sub"><span data-i18n="v058.m0199">镜像只带英文键盘，勾上会静默安装并启用随包的谷歌拼音输入法，
+              这样在安卓应用里能直接打中文。关掉则保持系统原生输入法。</span></span>
+          </div>
+          <input type="checkbox" id="setChineseIme" class="switch" />
         </div>
         <div class="field switch-field">
           <div>
@@ -426,16 +524,60 @@
         </details>
       </div>
 
+      <div class="group" id="preflightGroup">
+        <div class="group-title"><span data-i18n="v058.m0200">本机体检 · 自动配置</span></div>
+        <div class="field">
+          <span class="sub"><span data-i18n="v058.m0201">先查一遍这台机器：CPU 虚拟化有没有开、Windows 的虚拟机监控程序平台在不在、
+            显卡是什么、显存多大、内存和系统版本够不够。能自动改的（内存 / 核心 / 画质 / 渲染后端）直接写进设置，
+            并把结果固化成一份驱动；必须管理员权限的给按钮；只能在 BIOS 里改的会告诉你怎么改。</span></span>
+        </div>
+        <div class="field">
+          <div class="row">
+            <button class="btn primary sm" id="btnPreflight"><span data-i18n="v058.m0202">开始体检</span></button>
+            <button class="btn ghost sm" id="btnPreflightApply" hidden><span data-i18n="v058.m0203">应用推荐配置</span></button>
+          </div>
+        </div>
+        <div id="preflightList" class="drv-list"></div>
+        <div class="field">
+          <span class="sub" id="preflightSummary"></span>
+        </div>
+      </div>
+
+      <div class="group" id="driverGroup">
+        <div class="group-title"><span data-i18n="v058.m0204">驱动 · 兼容补丁</span></div>
+        <div class="field">
+          <span class="sub"><span data-i18n="v058.m0205">有些机器要改启动参数才跑得起来（老显卡 GLES 版本低、没开硬件加速、某版驱动一开硬件渲染就崩）。
+            驱动就是一份 JSON：声明「匹配哪些机器」+「命中后改哪些启动参数」。你可以自己写、导入、分享。
+            驱动只改白名单里的启动项，</span><b><span data-i18n="v058.m0206">不执行任何代码</span></b><span data-i18n="v058.m0207">；匹配不上就不生效。</span></span>
+        </div>
+        <div class="field">
+          <span class="sub" id="drvSummary"><span data-i18n="v058.m0208">正在读取驱动…</span></span>
+        </div>
+        <div id="drvList" class="drv-list"></div>
+        <div class="field">
+          <div class="row">
+            <button class="btn ghost sm" id="btnDrvReload"><span data-i18n="m0642">刷新</span></button>
+            <button class="btn ghost sm" id="btnDrvImport"><span data-i18n="v058.m0209">导入驱动…</span></button>
+            <button class="btn ghost sm" id="btnDrvFolder"><span data-i18n="v058.m0210">打开驱动目录</span></button>
+            <button class="btn ghost sm" id="btnDrvExport"><span data-i18n="v058.m0211">导出本机模板</span></button>
+          </div>
+          <span class="sub"><span data-i18n="v058.m0212">「导出本机模板」会把匹配条件按这台机器填好，改</span> <code>effect</code> <span data-i18n="v058.m0213">里的</span>
+            <code>gpuMode</code> / <code>forceTcg</code> <span data-i18n="v058.m0214">就能用。字段说明见仓库里的</span> <code>docs/drivers.md</code>。</span>
+        </div>
+      </div>
+
       <details class="advanced-group">
         <summary><span data-i18n="m0618">高级参数（一般无需修改）</span></summary>
       <div class="group">
         <div class="group-title"><span data-i18n="m0619">运行时</span></div>
         <div class="field">
-          <label><span data-i18n="m0620">引擎模式</span></label>
-          <select id="setEngineMode">
-            <option value="builtin" data-i18n="m0621">自带运行时（推荐，QEMU + Android-x86，无第三方依赖）</option>
-            <option value="attach" data-i18n="m0622">连接已有运行时（高级：复用 WSA / 其他模拟器的 adb 端口）</option>
-          </select>
+          <label><span data-i18n="m0619">运行时</span></label>
+          <div class="row">
+            <input id="setEngineLabel" type="text" readonly value="ApkStart 自带运行时（QEMU + Android 14，独立运行）"  data-i18n-value="v058.m0215"/>
+          </div>
+          <span class="sub"><span data-i18n="v058.m0216">ApkStart 只跑自己的运行时：adb / emulator / 系统镜像都由它自己下载和管理，
+            不探测、不接管、不依赖你电脑上装的任何模拟器（MuMu / 雷电 / 蓝叠 / WSA 都不会被使用）。
+            这样换机器、别人装没装模拟器、模拟器怎么升级，都不影响这里。</span></span>
         </div>
         <div class="field">
           <label><span data-i18n="m0623">adb 路径</span></label>
@@ -443,10 +585,7 @@
         </div>
         <div class="field">
           <label><span data-i18n="m0625">设备地址</span></label>
-          <div class="row">
-            <input id="setDevice" type="text" placeholder="127.0.0.1:58526" />
-            <button class="btn ghost sm" id="btnProbe"><span data-i18n="m0626">探测</span></button>
-          </div>
+          <span class="sub" id="deviceAddrNote"><span data-i18n="v058.m0217">由 ApkStart 自己分配（emulator-5554，端口冲突时自动顺延），无需填写。</span></span>
         </div>
         <div class="field">
           <label><span data-i18n="m0627">系统镜像（ISO）</span></label>
@@ -461,6 +600,9 @@
             <label><span data-i18n="m0630">CPU 核心（0 = 自动）</span></label>
             <input id="setCores" type="number" min="0" max="16" />
           </div>
+        </div>
+        <div class="field">
+          <span class="sub" id="builtinResNote"></span>
         </div>
         <div class="field">
           <label><span data-i18n="m0631">空闲回收（分钟，0 = 不回收）</span></label>

@@ -11,12 +11,13 @@ const { spawn, execFile } = require('child_process');
 const net = require('net');
 const fs = require('fs');
 const path = require('path');
-const { AdbClient } = require('./adb');
+const { AdbClient, isUnauthorizedError } = require('./adb');
 const store = require('./store');
 const { Provisioner } = require('./provision');
 const { EmulatorEngine } = require('./emulator');
 const doctor = require('./doctor');
 const container = require('./container');
+const backends = require('./backends');
 
 const LOG_DIR = path.join(store.DATA_DIR, 'logs');
 const MONITOR_PORT = 5556;
@@ -40,14 +41,6 @@ function portAlive(port, timeout = 150) {
   });
 }
 
-const ATTACH_ENDPOINTS = [
-  { name: 'Windows Subsystem for Android', serial: '127.0.0.1:58526' },
-  { name: 'LDPlayer', serial: '127.0.0.1:5555' },
-  { name: 'MuMu 模拟器', serial: '127.0.0.1:7555' },
-  { name: 'Nox 夜神', serial: '127.0.0.1:62001' },
-  { name: 'MEmu 逍遥', serial: '127.0.0.1:21503' },
-];
-
 class Runtime {
   constructor(appRoot) {
     this.appRoot = appRoot;
@@ -62,9 +55,60 @@ class Runtime {
     this._client = null;
     this._bootLog = [];
     this._activeApps = new Set();  // 容器会话：当前打开的应用窗口
+    // 多窗口模式下被墓碑化（force-stop 但保留数据）的后台应用；下次点开走热恢复。
+    this._tombstoned = new Set();
+    // 最近一次网络体检结果。状态栏要显示「网络正常/未联网」，但状态是高频轮询的，
+    // 不能每次都去 guest 里跑一遍 shell；这里只缓存结论，过期（>5 分钟）就不采信。
+    this._lastNetwork = null;
     this.emuSerial = EMU_SERIAL;   // 端口是动态挑的，serial 跟着变
+    /**
+     * 后端适配层：把「安卓从哪来」从本类里抽出去。
+     *
+     * 0.5.6 起这里**只有一个实现**：builtin（自带 emulator + 系统镜像）。
+     * 不再有 mumu / fydeos / attach 这些分支 —— 任何机器、任何设置、任何残留配置
+     * 都只会拿到自带运行时，保证 ApkStart 永远独立运行、与第三方模拟器无关。
+     */
+    this._backend = null;
+    this._backendId = '';
     store.ensureDirs();
     if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+  }
+
+  /**
+   * 当前后端实例（只有一个：builtin）。
+   * @returns {import('./backends/base').Backend}
+   */
+  get backend() {
+    if (!this._backend) {
+      const made = backends.create({
+        appRoot: this.appRoot, settings: this.settings, runtime: this, store, log: (l) => this.log(l),
+      });
+      this._backend = made.backend;
+      this._backendId = made.id;
+    }
+    return this._backend;
+  }
+
+  /**
+   * 设置里要的底座本机到底有没有。
+   *
+   * 现在只有自带运行时，它永远可用（缺镜像那是 provision 阶段的事，不是「底座不存在」）。
+   * 保留这个方法是为了不改上层调用点。
+   */
+  async backendAvailable() {
+    return { ok: true, id: 'builtin' };
+  }
+
+  /** 后端 id，永远是 'builtin'；界面和日志用 */
+  get backendId() { return this.backend.id; }
+
+  /** 丢掉旧的连接与端口假设（换运行时目录、重置数据后调用） */
+  resetBackend() {
+    if (this._backend && this._backend.dispose) {
+      try { this._backend.dispose(); } catch (_) { /* ignore */ }
+    }
+    this._backend = null;
+    this._backendId = '';
   }
 
   get settings() { return store.getSettings(); }
@@ -77,16 +121,16 @@ class Runtime {
   adbPath() {
     const s = this.settings;
     const p = this.provisioner.paths();
-    if (s.adbPath && fs.existsSync(s.adbPath)) return s.adbPath;
+    // 自带 adb 永远排在第一位：同一台设备只认一份 adb 状态，不会出现 offline 反复抖动。
     if (fs.existsSync(p.adbExe)) return p.adbExe;
+    if (s.adbPath && fs.existsSync(s.adbPath)) return s.adbPath;
     const local = path.join(this.appRoot, 'tools', 'platform-tools', 'adb.exe');
     if (fs.existsSync(local)) return local;
     return AdbClient.resolveAdb('', this.appRoot);
   }
 
   client(serial) {
-    const useSerial = serial
-      || (this.settings.engine.mode === 'attach' ? this.settings.device : this.emuSerial);
+    const useSerial = serial || this.emuSerial;
     const adbPath = this.adbPath();
     if (!this._client || this._client.serial !== useSerial || this._client.adbPath !== adbPath) {
       // 换端口/换 adb 时别把旧的常驻 adb shell 留在后台占着连接
@@ -105,12 +149,44 @@ class Runtime {
 
   // ---------------- 状态 ----------------
 
+  /**
+   * 给状态栏用的网络快照（最近一次体检结论）。
+   * 超过 5 分钟就不采信：中间可能断过网，宁可显示「未知」也不要骗用户说还行。
+   */
+  _networkSnapshot() {
+    const n = this._lastNetwork;
+    if (!n) return null;
+    if (Date.now() - n.at > 5 * 60 * 1000) return null;
+    return { ok: n.ok, ip: n.ip, reason: n.reason };
+  }
+
+  /**
+   * 后台补一次网络体检（不阻塞 status 返回）。
+   * 状态栏要显示网络状态，但 status() 是高频轮询的，不能每次都去 guest 里跑 shell。
+   * 所以第一次（或过期后）在后台跑一遍，结论缓存进 _lastNetwork，下一次轮询就能显示。
+   */
+  _probeNetworkInBackground() {
+    if (this._netProbing) return;
+    const n = this._lastNetwork;
+    if (n && Date.now() - n.at < 60000) return;  // 一分钟内刚查过，别重复
+    this._netProbing = true;
+    this.emulator.checkNetwork(this.adbPath())
+      .then((r) => {
+        this._lastNetwork = { ok: !!(r && r.ok), ip: (r && r.ip) || '', reason: (r && r.reason) || '', at: Date.now() };
+      })
+      .catch(() => { /* 查不到就保持原样，下一轮再试 */ })
+      .finally(() => { this._netProbing = false; });
+  }
+
   async status() {
+    const backend = this.backend;
     const env = await this.provisioner.checkEnv();
     const s = this.settings;
     const client = this.client();
     const result = {
       mode: s.engine.mode,
+      backend: backend.id,
+      backendLabel: backend.label,
       installed: !!s.runtime.installed,
       env,
       engineKind: env.engine,
@@ -134,6 +210,7 @@ class Runtime {
       needsSetup: null,
       error: '',
       serial: this.emuSerial,
+      network: this._networkSnapshot(),
       autoProfile: this.emulator.profile ? doctor.describeProfile(this.emulator.profile) : '',
       diagnosis: this.emulator.lastDiagnosis || null,
       attempts: this.emulator.attempts || [],
@@ -158,6 +235,7 @@ class Runtime {
         result.android = android;
         result.sdk = sdk;
         result.freeform = String(ff).trim() === '1' || this._freeformReady;
+        this._probeNetworkInBackground();
       }
     } catch (e) {
       result.error = e.message;
@@ -181,20 +259,21 @@ class Runtime {
     return result;
   }
 
-  /** 高级模式：探测本机已有运行时（非默认路径） */
+  /**
+   * 本机 adb 已连上的设备清单（只读诊断用）。
+   *
+   * 0.5.6 起不再有「连接已有运行时」模式：这里不会去主动 connect 别的模拟器端口，
+   * 只把 adb 当前看到的设备如实列出来，方便排障时确认「是不是我们的 emulator-5554」。
+   */
   async probe() {
-    const adbPath = this.adbPath();
-    const one = (ep) => new Promise((resolve) => {
-      const c = new AdbClient({ adbPath, serial: ep.serial });
-      const timer = setTimeout(() => resolve(null), 4000);
-      c.isOnline().then((online) => {
-        clearTimeout(timer);
-        if (!online && ep.serial.includes(':')) return c.connect().then((ok) => (ok ? ep : null));
-        return online ? ep : null;
-      }).then(resolve).catch(() => { clearTimeout(timer); resolve(null); });
-    });
-    const found = await Promise.all(ATTACH_ENDPOINTS.map(one));
-    return found.filter(Boolean);
+    try {
+      const devices = await this.client().devices();
+      return devices
+        .filter((d) => d.state === 'device')
+        .map((d) => ({ name: d.serial, serial: d.serial }));
+    } catch (_) {
+      return [];
+    }
   }
 
   // ---------------- 启动 / 停止虚拟机 ----------------
@@ -276,6 +355,13 @@ class Runtime {
       let probeStart = Date.now();
       let errStreak = 0;
       let lastHeal = 0;
+      let authHealed = false;  // 本次 start() 是否已因「未授权」作废旧快照冷启动过
+      const diagUnauthorized = () => ({
+        code: 'ADB_UNAUTHORIZED',
+        title: '安卓调试授权未完成（授权对话框）',
+        hint: '系统卡在「允许 USB 调试？」对话框，已自动作废旧快照并冷启动一次让运行时'
+          + '重新注入 adb 公钥。若反复出现，请删除 %USERPROFILE%\\.android\\adbkey* 后重试。',
+      });
       const probe = async ({ serial }) => {
         if (!this.emulator.running()) return 'fatal';
         if (!this._probeClient || this._probeClient.serial !== serial) {
@@ -290,11 +376,33 @@ class Runtime {
           errStreak = 0;
           if (booted && pmReady) return 'ok';
           return booted ? 'pending' : 'booting';
-        } catch (_) {
+        } catch (e) {
           errStreak += 1;
-          // adb 传输会偶发地卡在 offline / unauthorized（另一个 adb server 抢了端口、
-          // 或者握手被打断），这时每一轮 shell 都报错，probe 永远 pending ——
-          // 上层只会看到「开机超时」，白白等到 240 秒。连错 6 轮就重启一次 server 自愈。
+          // 关键分支：adb shell 报错可能是「还没开机」也可能是「授权对话框卡住」。
+          // 后者每轮 shell 都抛异常，旧实现只当普通 offline：重启 server 后继续按
+          // 240s×4 组参数干等，最后报「运行时未能完成开机」，让用户以为是显卡/虚拟化。
+          // 这里先按报错文本、再按 devices 的 state 列（get-state 分不清 authorized）
+          // 双重确认 unauthorized，命中就作废旧快照冷启动 + 给出准确诊断，不再空等。
+          const raw = String((e && (e.raw || e.stdout || e.message)) || '');
+          let unauthorized = isUnauthorizedError(raw);
+          if (!unauthorized) {
+            const st = await c.deviceState().catch(() => '');
+            unauthorized = st === 'unauthorized';
+          }
+          if (unauthorized) {
+            this.emulator.lastDiagnosis = diagUnauthorized();
+            if (!authHealed) {
+              authHealed = true;
+              onLog('adb 卡在「允许 USB 调试」授权对话框，正在作废旧快照并冷启动以重新注入公钥…');
+              try { this.emulator.invalidateSnapshot(); } catch (_) { /* ignore */ }
+              this.emulator._coldBoot = true; // 下一轮强制冷启动，让 emulator 重新注入 adb 公钥
+              await this.emulator.resetAdbServer().catch(() => {});
+              this._probeClient = null;
+            }
+            // 交给 start() 立刻换一组参数重试；冷启动后 dialog 问题会消失
+            return 'fatal';
+          }
+          // 其它 adb 传输异常：沿用原来的重启 server 自愈
           const now = Date.now();
           if (errStreak >= 6 && now - probeStart > 25000 && now - lastHeal > 30000) {
             lastHeal = now;
@@ -354,6 +462,19 @@ class Runtime {
   scheduleSnapshotSave(delay = 12000) { this._armSnapshotSave(delay); }
 
   /**
+   * 强制存一份快照，**不等空闲**。
+   *
+   * 什么时候需要：刚修好网络、马上就要启动应用的时候。正常的
+   * scheduleSnapshotSave 只在没有应用窗口时才写盘，而应用一起来就永远不空闲，
+   * 于是「网络已连上」这个状态从来没被存下来 —— 下次开机又从旧快照恢复成
+   * 断网状态，每次都要重连一遍。这里显式绕过空闲判断，一次写盘换之后次次省。
+   */
+  forceSnapshotSave(delay = 3000) {
+    if (!this.emulator.running()) return;
+    this.emulator.scheduleSnapshotSave(this.adbPath(), { delay, isIdle: () => true });
+  }
+
+  /**
    * 预热：在用户点开应用之前，先把安卓环境在后台引导好。
    * WSA / 应用宝电脑版都是这个思路 —— 环境常驻，点图标时只剩一次 am start。
    *  - 完全静默：不弹窗、不报错，失败不影响正常打开应用；
@@ -363,8 +484,6 @@ class Runtime {
   prewarm({ onLog = () => {} } = {}) {
     if (this._prewarmPromise) return this._prewarmPromise;
     if (this._activeApps.size > 0) return Promise.resolve({ ok: true, skipped: 'busy' });
-    // 高级模式是复用别人家已经跑起来的运行时，不该再替用户开一台自己的
-    if (this.settings.engine.mode === 'attach') return Promise.resolve({ ok: false, skipped: 'attach' });
     const t0 = Date.now();
     const p = (async () => {
       try {
@@ -529,7 +648,66 @@ class Runtime {
     if (!this._freeformReady) {
       try { this._freeformReady = await client.ensureFreeform(); } catch (_) { /* ignore */ }
     }
+    // 中文环境（系统语言 + 中文输入法）每次**开机**只做一次。
+    // 系统语言靠 emulator -prop 注入（SELinux 保护，运行时改不了），这里补的是
+    // 应用级 locale / 时区，以及静默装好并启用随包带的谷歌拼音输入法。
+    // 用户可在设置里关掉自动配置（engine.chineseIme=false）。
+    if (!this._chineseReady && this.settings.engine.chineseIme !== false) {
+      try {
+        const locale = this.settings.engine.locale || 'zh-CN';
+        await client.ensureChineseLocale(locale);
+        const path = require('path');
+        const apk = path.join(this.appRoot, 'assets', 'PinyinIME.apk');
+        const r = await client.ensureChineseIme(apk, {
+          setDefault: this.settings.engine.chineseImeDefault !== false,
+        });
+        // 只有真的成功了才置位。失败时允许下一次 prepare() 重试 ——
+        // 否则一次偶发的 adb 抖动就会让这台机器永远没有中文输入法。
+        if (r && r.ok) this._chineseReady = true;
+        this.log(`中文输入法：${r.ok ? (r.installed ? '已安装并启用' : '已就绪') : (r.reason || '未就绪')}`);
+        // -change-locale 只在「全量引导」时执行并重启 framework；从 quickboot 快照
+        // 恢复时会被跳过。旧快照是英文的，所以检测到系统语言不对就作废快照、
+        // 让下次开机冷启动一次（带 -change-locale）。之后存的新快照就是中文的，
+        // 不用再重启。marker 保证一生只纠正一次。
+        await this._ensureSystemLocale(client, locale);
+      } catch (e) {
+        this.log(`中文环境初始化跳过：${e.message}`);
+      }
+    }
     this.startWatchdog();
+  }
+
+  /**
+   * 系统 UI 语言校正（一次性）。
+   *
+   * 实测结论（很容易踩错）：-change-locale 生效后**不会**写 persist.sys.locale，
+   * ro.product.locale 也仍是镜像的 en-US；它真正改的是
+   * `settings system system_locales`（语言设置页显示「中文（中国）」，系统 UI 全中文）。
+   * 所以判断「中文是否已经生效」要看 system_locales，不是 getprop。
+   *
+   * -change-locale 只在「全量引导」时执行并重启 framework；从 quickboot 快照恢复时
+   * 会被跳过。旧快照是英文的，所以检测到不对就作废快照、让下次开机冷启动一次。
+   * 之后存的新快照就是中文的，不用再重启。marker 保证一生只纠正一次。
+   */
+  async _ensureSystemLocale(client, locale) {
+    const fs = require('fs');
+    const path = require('path');
+    const want = String(locale || 'zh-CN');
+    if (want === 'off' || want === 'en-US') return;
+    // 已经生效（system_locales 是目标语言，或语言列表里第一项是它）
+    const cur = await client.shell('settings get system system_locales', { timeout: 8000 }).catch(() => '');
+    const s = String(cur).trim();
+    if (s === want || s.indexOf(want) === 0 || /^zh[-_]/.test(s)) return;
+    const marker = path.join(store.DATA_DIR, 'locale-' + want.replace(/[^a-zA-Z0-9_-]/g, '_') + '.done');
+    if (fs.existsSync(marker)) return;
+    try {
+      fs.writeFileSync(marker, String(Date.now()));
+      this.log(`系统语言仍为 ${s || '(空)'}，作废旧快照，下次开机冷启动切到 ${want}`);
+      this.emulator.invalidateSnapshot();
+      this.emulator.forceColdBootOnNextStart();
+    } catch (e) {
+      this.log(`系统语言校正跳过：${e.message}`);
+    }
   }
 
   /** 优雅停止：emulator 走控制台关机，QEMU 走 monitor */
@@ -831,22 +1009,7 @@ class Runtime {
 
     const s = this.settings;
 
-    // 高级模式：连接已有运行时
-    if (s.engine.mode === 'attach') {
-      onLog('正在探测已有运行时…');
-      const found = await this.probe();
-      if (found.length) {
-        store.saveSettings({ device: found[0].serial });
-        const c2 = this.client(found[0].serial);
-        if (await c2.isOnline()) {
-          await this.prepare(c2);
-          return { ok: true, client: c2, engine: found[0].name };
-        }
-      }
-      return { ok: false, needsSetup: 'attach', error: '未发现可用的已有运行时' };
-    }
-
-    // 默认：自带运行时
+    // 唯一路径：自带运行时
     // 单文件发行版的镜像是压缩的，先展开（已展开过就秒过）。
     // 展开失败不要把错误吞掉：否则后面 checkEnv() 只会说「还差系统镜像」，
     // 用户会以为是没下载，而不是解压失败（磁盘满 / 文件损坏）。
@@ -910,20 +1073,47 @@ class Runtime {
     const first = this._activeApps.size === 0;
     this._activeApps.add(pkg);
     this.touch();
-    const state = container.nextSessionState([...this._activeApps], 'open', pkg);
     const s = this.settings;
     const mode = (s.engine && s.engine.priorityMode) || 'balanced';
-    const level = mode === 'game' ? 'game'
-      : mode === 'performance' ? 'normal' : 'below';
+    // 有应用在前台时的调度级别。balanced 用 normal（不是 below）：
+    // below 会让 qemu 在系统繁忙时被饿到，表现为视频解码掉帧、点击要等一下才响应 ——
+    // 这正是「点击不跟手」的主因。normal 只是与桌面同档，并不额外吃 CPU/内存/GPU。
+    const level = mode === 'game' ? 'game' : 'normal';
 
     if (first) {
       // 有应用要开了：把「空闲存快照」推迟，别在应用启动时抢磁盘
       this.emulator.cancelSnapshotSave();
-      await this.emulator.setPriority(level).catch(() => {});
+    }
+    // 每次打开/切回应用都确保优先级到位：endApp 会把空闲的 qemu 降到 idle，
+    // 切换回来时若不重新提，就会停在低优先级 → 点起来发木。setPriority 幂等，
+    // 已经是目标值时脚本内部不改、开销极小。
+    await this.emulator.setPriority(level).catch(() => {});
+    if (first) {
       try { onActive(true); } catch (_) { /* 轮询启动失败不影响打开应用 */ }
     }
 
+    // 多窗口模式（B 方案）：开新应用**不再** force-stop 其它应用，否则等于没多开。
+    // 改为按墓碑策略回收「太久没看的后台」，既允许多个并存、又不会内存失控。
+    // 关掉 multiWindow 时退回旧的「只留当前这个」行为，保证可回退。
+    if (s.engine && s.engine.multiWindow) {
+      const roles = container.sessionRoles([...this._activeApps], pkg);
+      const { tombstone } = container.planTombstones({
+        background: roles.background,
+        keepRecent: Number(s.engine.keepBackground) >= 0 ? Number(s.engine.keepBackground) : 1,
+      });
+      const cmds = container.buildTombstoneCommands(tombstone);
+      if (cmds.length) {
+        await this.client().shell(cmds.join(' ; '), { timeout: 20000 }).catch(() => '');
+        for (const p of tombstone) this._tombstoned.add(p);   // 记下被挂起的，下次点开热恢复
+        this.log(`多窗口：前台 ${pkg}，保留后台 ${roles.background.length - tombstone.length} 个，墓碑化 ${tombstone.length} 个`);
+      } else {
+        this.log(`多窗口：${roles.count} 个应用并存，无需回收`);
+      }
+      return { ...roles, plan: { commands: cmds, stopped: tombstone } };
+    }
+
     const installed = store.getApps().map((a) => a && a.package).filter(Boolean);
+    const state = container.nextSessionState([...this._activeApps], 'open', pkg);
     const plan = container.buildSessionCommands({
       pkg,
       installed,
@@ -977,10 +1167,83 @@ class Runtime {
 
   // ---------------- 空闲回收 ----------------
 
+  /**
+   * 方向自愈：保证「逻辑显示空间」和「物理面板」方向一致。
+   *
+   * 判断依据（实机 dumpsys window displays）：
+   *   init=1280x720 ... cur=1280x720   → 正常（横屏面板 + 横屏逻辑）
+   *   init=1280x720 ... cur=720x1280   → 躺倒：逻辑空间被旋转了 90°
+   * 一旦看到 cur 与 init 的宽高顺序相反，就说明有应用/系统把方向改回去了，
+   * 此时重新锁方向并忽略应用的方向请求即可纠正，不用重启虚拟机。
+   *
+   * 只在真的不一致时写 settings，正常情况下每 60 秒只有一次只读 shell。
+   */
+  async _healOrientation() {
+    if (!this.emulator || !this.emulator.running()) return;
+    const wantLand = !!this.settings.display.landscape;
+    const panelLand = typeof this.emulator.panelLandscape === 'function'
+      ? this.emulator.panelLandscape() : null;
+    // 面板方向和设置不一致 → 该重启，不是这里能修的（runLaunch.beforeStart 会处理）
+    if (panelLand !== null && panelLand !== wantLand) return;
+    const c = this.client();
+    const out = await c.shell('dumpsys window displays', { timeout: 12000 }).catch(() => '');
+    const init = /init=(\d+)x(\d+)/.exec(out);
+    const cur = /cur=(\d+)x(\d+)/.exec(out);
+    if (!init || !cur) return;
+    const initLand = Number(init[1]) > Number(init[2]);
+    const curLand = Number(cur[1]) > Number(cur[2]);
+    if (initLand !== curLand) {
+      // 真躺倒了：重新锁方向 + 忽略应用方向请求 + 恢复 density
+      this.log(`方向自愈：init=${init[1]}x${init[2]} cur=${cur[1]}x${cur[2]} 已躺倒，重新收敛`);
+      await c.resetDisplayOverrides(wantLand).catch(() => {});
+      await c.setOrientation(wantLand).catch(() => {});
+      return;
+    }
+    // 没躺倒 ≠ 状态就对。平板排版依赖两个易丢的运行时状态：
+    //   - mSetIgnoreOrientationRequest（横屏时必须为 true，否则面板会被应用方向带歪）
+    //   - wm density 覆盖为 190（720 宽 → sw606dp ≥ 600dp 才走平板排版）
+    // 这两项一旦丢失，会退回手机形态 —— 正是「平板模式不稳定」的表现。
+    // 这里做一次轻量校验，缺哪个补哪个（都是幂等命令，正常情况不写）。
+    const densityWanted = (this.settings.display || {}).tabletMode !== false ? 190 : null;
+    let ignoreOk = true;
+    if (wantLand) {
+      const win = await c.shell('dumpsys window | grep -oE "mSetIgnoreOrientationRequest=(true|false)"', { timeout: 8000 }).catch(() => '');
+      ignoreOk = /mSetIgnoreOrientationRequest=true/.test(String(win));
+    }
+    let densityOk = true;
+    if (densityWanted) {
+      const dens = await c.shell('wm density', { timeout: 6000 }).catch(() => '');
+      // 「Override density: N」行存在且等于目标值才算对
+      const m = /Override density:\s*(\d+)/.exec(String(dens));
+      densityOk = !!m && Number(m[1]) === densityWanted;
+    }
+    if (!ignoreOk || !densityOk) {
+      this.log(`显示状态收敛：ignore-orientation=${ignoreOk} density=${densityOk} → 补齐`);
+      if (!ignoreOk) await c.shell('wm set-ignore-orientation-request true', { timeout: 8000 }).catch(() => {});
+      // density 只在**没有应用在前台**时才补。
+      // 改密度会触发配置变更 + Activity 重建，而缓存了 DisplayMetrics 的应用
+      // （墨读）会按旧密度重算一遍 dp，画面缩成左上角一小块、右边全是空白 ——
+      // 用户看到的就是「墨读没有填满窗口」。有应用在跑时留给下一次启动路径，
+      // installer.launch 的 resetDisplayOverrides 会在 am start 之前设好。
+      if (!densityOk) {
+        if (this._activeApps.size === 0) {
+          await c.shell(`wm density ${densityWanted}`, { timeout: 8000 }).catch(() => {});
+        } else {
+          this.log(`density=${densityWanted} 缺失但有应用在前台：跳过，等下次启动时设置（避免画面缩水）`);
+        }
+      }
+    }
+  }
+
   startWatchdog() {
     if (this._watchdog) return;
     this._watchdog = setInterval(async () => {
       const s = this.settings;
+      // 方向自愈：应用启动 / Activity 重建 / 系统弹窗都可能把 user-rotation 或
+      // 「忽略应用方向请求」改回去。一旦被改回去，横屏面板上的画面就会躺倒 90°
+      // （用户说的「平板模式软件总是 90 度躺着」）。这里每轮巡检读一次真实状态，
+      // 只有在**确实不一致**时才纠正，正常情况零写入。
+      await this._healOrientation().catch(() => {});
       const limit = (s.engine.idleShutdownMinutes || 0) * 60000;
       if (!limit) return;
       // 接管来的模拟器没有本地 proc 句柄，vmRunning 会是 false：
@@ -1113,6 +1376,17 @@ class Runtime {
   }
 
   /**
+   * 把「已保存但不会自动连」的 AndroidWifi 连上（非破坏性，不重启、不清数据）。
+   * 具体实现与实机原因见 emulator.repairWifi。
+   *
+   * @returns {Promise<boolean>} 是否已连上
+   */
+  async repairWifi(adbPath = '') {
+    const adb = adbPath || (typeof this.adbPath === 'function' ? this.adbPath() : '');
+    return this.emulator.repairWifi(adb).catch(() => false);
+  }
+
+  /**
    * 等待虚拟机联网。
    *
    * 实测：`sys.boot_completed` 只代表系统起来了，Wi-Fi 关联 + DHCP 还要再等
@@ -1123,22 +1397,39 @@ class Runtime {
    * @returns {Promise<{ok:boolean,reason:string,ip?:string,gateway?:string}>}
    */
   async waitForNetwork({ timeoutMs = 90000, onLog = () => {}, adbPath = '' } = {}) {
+    const done = (r) => {
+      this._lastNetwork = { ok: !!(r && r.ok), ip: (r && r.ip) || '', reason: (r && r.reason) || '', at: Date.now() };
+      return r;
+    };
     const t0 = Date.now();
     let last = null;
     let lastNotice = 0;
     let offlineSince = 0;
+    let notConnectedStreak = 0;
     while (Date.now() - t0 < timeoutMs) {
       const online = await this.client().isOnline().catch(() => false);
       if (!online) {
         // 刚重启的虚拟机会有一段时间连 adb 都还没上线，不能一看到 offline 就放弃
         // （之前就是这样：重置数据后立刻返回 device-offline，判定「修复失败」）。
         if (!offlineSince) offlineSince = Date.now();
-        if (Date.now() - offlineSince > 45000) return { ok: false, reason: 'device-offline' };
+        if (Date.now() - offlineSince > 45000) return done({ ok: false, reason: 'device-offline' });
       } else {
         offlineSince = 0;
         // eslint-disable-next-line no-await-in-loop
         last = await this.emulator.checkNetwork(adbPath || this.adbPath()).catch(() => null);
-        if (last && last.ok) return last;
+        if (last && last.ok) return done(last);
+        // `wifi-not-connected` 是「Wi-Fi 压根没关联上」，不是「关联了还在等 DHCP」。
+        // 这种状态下死等超时纯属浪费：本轮开机它不会自己连上（实机上 AndroidWifi
+        // 常落成「已保存但不会自动连接」）。连续几次都是这个原因就提前收工，
+        // 让调用方赶紧去做真正有效的重连，别把 20 秒耗在原地。
+        // 取 3 次（≈9 秒）而不是 2 次：刚开机时 Wi-Fi 本来就要几秒关联，
+        // 判太早会去点设置页，反而打断它自己连上的过程。
+        if (last && last.reason === 'wifi-not-connected') {
+          notConnectedStreak += 1;
+          if (notConnectedStreak >= 3) return done(last);
+        } else {
+          notConnectedStreak = 0;
+        }
       }
       if (Date.now() - lastNotice > 10000) {
         lastNotice = Date.now();
@@ -1147,7 +1438,7 @@ class Runtime {
       // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 3000));
     }
-    return last || { ok: false, reason: 'timeout' };
+    return done(last || { ok: false, reason: 'timeout' });
   }
 
   /**
@@ -1166,6 +1457,24 @@ class Runtime {
   async ensureNetwork({ onLog = () => {}, firstWaitMs = 25000, secondWaitMs = 90000 } = {}) {
     let net = await this.waitForNetwork({ onLog, timeoutMs: firstWaitMs });
     if (net && net.ok) return net;
+    // 先试便宜的办法：把「已保存但不会自动连」的 AndroidWifi 点一下。
+    // 这一步比冷启动、比清数据都轻几个数量级——不重启虚拟机、不动用户数据。
+    // 实机上这才是绝大多数「虚拟机没网」的真正原因（见 emulator.repairWifi 注释）。
+    if (!this._wifiRepairTried) {
+      this._wifiRepairTried = true;
+      onLog('虚拟机连不上 Wi-Fi，正在尝试重新连接…');
+      try {
+        const fixed = await this.emulator.repairWifi(this.adbPath());
+        if (fixed) {
+          net = await this.waitForNetwork({ onLog, timeoutMs: 15000 });
+          if (net && net.ok) {
+            onLog(`网络已恢复（${net.ip || ''}），正在保存可用状态，下次直接就好。`);
+            try { await this.emulator.saveSnapshotNow(this.adbPath(), { timeout: 90000 }); } catch (_) { /* ignore */ }
+            return net;
+          }
+        }
+      } catch (_) { /* 修复失败就走下面的重路径 */ }
+    }
     // 冷启动很贵（几十秒），一个进程里只做一次：否则每次点开应用都要重来一遍，
     // 用户感受到的就是「点开要等好几分钟」。
     if (this._netColdBootTried) return net;
@@ -1195,18 +1504,54 @@ class Runtime {
    */
   async repairNetwork({ onLog = () => {} } = {}) {
     try {
-      // 直接重置数据：这是实测唯一稳定能让这个镜像联网的办法。
-      // （先冷启动再等 3 分钟只是白等 —— 已有用户数据上的冷启动根本连不上 Wi-Fi。）
-      onLog('正在修复虚拟机网络：重置安卓数据并重新开机（应用清单会保留，点开时自动重装）…');
+      // 阶梯式修复，从最便宜的开始，能不丢数据就绝不丢：
+      //   1) 重新连一次 Wi-Fi（不重启、不动数据）
+      //   2) 冷启动（不加载快照，仍不动数据）
+      //   3) 最后才重置数据
+      onLog('正在修复虚拟机网络：先尝试重新连接 Wi-Fi（不影响已装应用）…');
+      if (!this.vmRunning) {
+        const boot0 = await this.ensure({ onLog });
+        if (!boot0 || !boot0.ok) {
+          return { ok: false, error: (boot0 && boot0.error) || '虚拟机没能启动', boot: false };
+        }
+      }
+      this._wifiRepairTried = true;
+      let fixed = false;
+      try { fixed = await this.emulator.repairWifi(this.adbPath()); } catch (_) { fixed = false; }
+      if (fixed) {
+        const net1 = await this.waitForNetwork({ onLog, timeoutMs: 30000 });
+        if (net1 && net1.ok) {
+          try { await this.emulator.saveSnapshotNow(this.adbPath(), { timeout: 90000 }); } catch (_) { /* ignore */ }
+          onLog(`网络已恢复（${net1.ip || ''}），已存好可用快照。`);
+          return { ok: true, network: net1, boot: true, wiped: false };
+        }
+      }
+      // 第 2 步：冷启动，绕开可能「没网」的快照
+      onLog('重新连接没成功，正在冷启动一次虚拟机（不加载快照，数据保留）…');
+      await this.stop({ graceful: false }).catch(() => {});
+      await new Promise((r) => setTimeout(r, 2500));
+      this.emulator.forceColdBootOnNextStart();
+      const boot = await this.ensure({ onLog });
+      if (!boot || !boot.ok) {
+        return { ok: false, error: (boot && boot.error) || '虚拟机没能启动', boot: false };
+      }
+      let network = await this.waitForNetwork({ onLog, timeoutMs: 90000 });
+      if (network && network.ok) {
+        try { await this.emulator.saveSnapshotNow(this.adbPath(), { timeout: 90000 }); } catch (_) { /* ignore */ }
+        onLog(`网络已恢复（${network.ip || ''}），已存好可用快照。`);
+        return { ok: true, network, boot: true, wiped: false };
+      }
+      // 第 3 步：还没网，只能重置数据了（会丢应用内数据）
+      onLog('仍然没有网络，正在重置安卓数据并重新开机（应用清单会保留，点开时自动重装）…');
       if (this.vmRunning) await this.stop({ graceful: false }).catch(() => {});
       // 给上一次的 qemu / netsimd 一点时间退干净，否则 -wipe-data 会撞 AVD 锁
       await new Promise((r) => setTimeout(r, 2500));
       this.emulator.forceWipeOnNextStart();
-      const boot = await this.ensure({ onLog });
-      if (!boot || !boot.ok) {
-        return { ok: false, error: (boot && boot.error) || '虚拟机没能启动', boot: false, wiped: true };
+      const boot2 = await this.ensure({ onLog });
+      if (!boot2 || !boot2.ok) {
+        return { ok: false, error: (boot2 && boot2.error) || '虚拟机没能启动', boot: false, wiped: true };
       }
-      const network = await this.waitForNetwork({ onLog, timeoutMs: 240000 });
+      network = await this.waitForNetwork({ onLog, timeoutMs: 240000 });
       if (network && network.ok) {
         // 立刻把「网络正常」的状态存成快照：下次恢复时网卡状态一起还原，
         // 否则关掉再开又会回到没网状态。
@@ -1224,6 +1569,10 @@ class Runtime {
   dispose() {
     if (this._watchdog) clearInterval(this._watchdog);
     if (this._client && this._client.disposeInput) this._client.disposeInput();
+    // 后端适配层只有自带运行时；dispose 只做自己的清理，不会去动任何外部模拟器
+    if (this._backend && this._backend.dispose) {
+      try { this._backend.dispose(); } catch (_) { /* ignore */ }
+    }
     this.emulator.cancelSnapshotSave();
     // 这里【绝对不能】强杀 qemu：
     //  1) 强杀会把正在写盘的 quickboot 快照截断，只留下几 GB 的 ram.img 空壳，

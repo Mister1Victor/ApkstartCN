@@ -1,24 +1,32 @@
 'use strict';
 /**
  * 便携版打包：产出 dist/ApkStart-win64-portable/
- *   ApkStart.exe（即 electron.exe 改名）+ resources/app（本应用源码）
- * 无需安装器，解压即用；将来接 electron-builder 出安装包时可复用同一目录结构。
+ *   ApkStart.exe（electron.exe 改名 + 写入图标/版本资源）+ resources/app（本应用源码）
+ * 无需安装器，解压即用。
+ *
+ * --full（或 APKSTART_PACK_FULL=1）时产出「完整版」：
+ *   额外把 build/runtime 复制进 resources/runtime，解压即用、首次启动不需要下载任何东西。
+ *   输出目录默认 dist/ApkStart-v<版本>-win64-full，不会覆盖轻量版。
  */
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
+const { assertStandalone } = require('./guard-standalone');
 
 const ROOT = path.join(__dirname, '..');
+const PKG = require(path.join(ROOT, 'package.json'));
+const FULL = process.argv.includes('--full') || process.env.APKSTART_PACK_FULL === '1';
 // 允许指定输出目录（用于目标目录被正在运行的实例占用时，先构建到别处再替换）
 let OUT = process.env.APKSTART_PACK_OUT
   ? path.resolve(process.env.APKSTART_PACK_OUT)
-  : path.join(ROOT, 'dist', 'ApkStart-win64-portable');
+  : path.join(ROOT, 'dist', FULL ? `ApkStart-v${PKG.version}-win64-full` : 'ApkStart-win64-portable');
 const ELECTRON_DIST = path.join(ROOT, 'node_modules', 'electron', 'dist');
 
 function copy(src, dest) {
   fs.cpSync(src, dest, { recursive: true });
 }
 
-console.log('打包便携版 →', OUT);
+console.log(FULL ? '打包完整版（含运行时）→' : '打包便携版 →', OUT);
 // 目标已存在时不做整树删除：部分环境会拦截批量删除，且打包中途失败会丢掉
 // 上一个可用版本。改为先把旧目录改名保留，再全新构建；占用中则自动换目录。
 if (fs.existsSync(OUT)) {
@@ -74,9 +82,11 @@ for (const rel of ['d3dcompiler_47.dll']) {
 }
 
 // 2. 应用本体
+// assets/ 里是随包分发的资源：PinyinIME.apk（中文输入法），开机时由
+// Runtime.prepare() 静默装进安卓。漏掉它用户就打不了中文。
 console.log('复制应用…');
 const appDir = path.join(OUT, 'resources', 'app');
-for (const item of ['package.json', 'src', 'LICENSE']) {
+for (const item of ['package.json', 'src', 'assets', 'LICENSE']) {
   const src = path.join(ROOT, item);
   if (fs.existsSync(src)) copy(src, path.join(appDir, item));
 }
@@ -97,12 +107,82 @@ for (const opt of ['engine']) {
   }
 }
 
+// 3.5 完整版：把运行时（emulator + platform-tools + 系统镜像）也放进去
+if (FULL) {
+  const runtime = path.join(ROOT, 'build', 'runtime');
+  const runtimeExe = path.join(runtime, 'emulator', 'emulator.exe');
+  if (!fs.existsSync(runtimeExe)) {
+    console.error('\n[!] 找不到 build/runtime/emulator/emulator.exe。');
+    console.error('    先跑 node build/prepare-runtime.js（npm run runtime）生成运行时，再打完整版。\n');
+    process.exit(1);
+  }
+  console.log('内置运行时（约 1 GB，需要一会儿）…');
+  fs.cpSync(runtime, path.join(OUT, 'resources', 'runtime'), { recursive: true });
+}
+
+// 3.6 独立运行守卫：产物里不许出现 MuMu / 雷电 / 蓝叠等第三方模拟器。
+// 命中就让构建失败 —— 这类问题只会在「别人的电脑」上暴露，本地永远测不出来。
+assertStandalone(path.join(OUT, 'resources'), { label: '便携版 resources' });
+
 // 4. 改名主程序
-fs.renameSync(path.join(OUT, 'electron.exe'), path.join(OUT, 'ApkStart.exe'));
+const exePath = path.join(OUT, 'ApkStart.exe');
+fs.renameSync(path.join(OUT, 'electron.exe'), exePath);
+
+/**
+ * 给 ApkStart.exe 写入图标与版本资源。
+ *
+ * 为什么必须做：直改名出来的 exe 里面还是 Electron 的东西 ——
+ * FileDescription=Electron、ProductName=Electron、CompanyName=GitHub, Inc.、
+ * 版本号 33.4.11，图标也是 Electron 的。于是资源管理器、任务栏固定项、
+ * 快捷方式属性、杀软/系统信息里全显示「Electron」和默认图标，
+ * 用户看到的就是「图标是默认的」。
+ *
+ * rcedit 是 electron-builder / electron-winstaller 用的同一个工具，
+ * 这里直接用 node_modules 里现成的那份，不需要联网。
+ */
+function embedExeMeta(exe) {
+  const rcedit = [
+    path.join(ROOT, 'node_modules', 'electron-winstaller', 'vendor', 'rcedit.exe'),
+    path.join(ROOT, 'node_modules', 'rcedit', 'bin', 'rcedit-x64.exe'),
+  ].find((p) => fs.existsSync(p));
+  if (!rcedit) {
+    console.warn('  [!] 找不到 rcedit.exe，exe 图标/版本信息保持 Electron 默认值');
+    return false;
+  }
+  const ico = path.join(ROOT, 'src', 'ui', 'assets', 'appicon.ico');
+  if (!fs.existsSync(ico)) {
+    console.warn(`  [!] 找不到 ${ico}，跳过图标写入`);
+    return false;
+  }
+  const args = [
+    exe,
+    '--set-icon', ico,
+    // 四段式文件版本（和 MSIX 的口径一致），产品版本用三段式
+    '--set-file-version', `${PKG.version}.0`,
+    '--set-product-version', PKG.version,
+    '--set-version-string', 'ProductName', 'ApkStart',
+    '--set-version-string', 'FileDescription', 'ApkStart 安卓应用运行器',
+    '--set-version-string', 'CompanyName', PKG.author || 'RoutineMiku',
+    '--set-version-string', 'LegalCopyright', 'Copyright (c) 2026 ApkStart',
+    '--set-version-string', 'OriginalFilename', 'ApkStart.exe',
+    '--set-version-string', 'InternalName', 'ApkStart',
+  ];
+  try {
+    execFileSync(rcedit, args, { stdio: 'pipe', windowsHide: true });
+    console.log(`  exe 图标/版本已写入（${PKG.version}，FileDescription=ApkStart 安卓应用运行器）`);
+    return true;
+  } catch (e) {
+    console.warn(`  [!] rcedit 失败：${e.message}`);
+    return false;
+  }
+}
+embedExeMeta(exePath);
 
 // 5. 版本信息
-const pkg = require(path.join(ROOT, 'package.json'));
-fs.writeFileSync(path.join(OUT, 'VERSION.txt'), `ApkStart ${pkg.version}\n构建时间：${new Date().toLocaleString('zh-CN')}\n`);
+const pkg = PKG;
+const fullNote = FULL ? '完整版（内置运行时，装完不联网）' : '轻量版（首次启动下载运行时）';
+fs.writeFileSync(path.join(OUT, 'VERSION.txt'),
+  `ApkStart ${pkg.version}\n${fullNote}\n构建时间：${new Date().toLocaleString('zh-CN')}\n`);
 
 // 6. 体积报告：每次打包都打印，避免以后又悄悄变胖
 function dirSize(dir) {
@@ -120,5 +200,6 @@ console.log(
   `完成。整包 ${totalMB.toFixed(0)} MB（语言包省了 ${(localeSaved / 1048576).toFixed(0)} MB，`
   + `冗余运行库省了 ${(pruneSaved / 1048576).toFixed(1)} MB）。`,
 );
-console.log('压缩：node build/zip.js dist/ApkStart-win64-portable <输出.zip>');
+console.log('压缩：node build/zip.js ' + path.relative(ROOT, OUT) + ' <输出.zip>');
 console.log(`运行 ${path.join(OUT, 'ApkStart.exe')} 即可使用。`);
+if (!FULL) console.log('想要「一次下载、装完不联网」的完整版：node build/pack.js --full');

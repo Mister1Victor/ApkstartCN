@@ -180,5 +180,38 @@ console.log('\n[合成 APK：axml + apk 全链路]');
   }
 }
 
+{
+  const { detectOrientation } = require('../src/core/apk');
+  const { ANDROID_NS } = require('../src/core/axml');
+  const act = (name, ori) => ({
+    name: 'activity',
+    attrs: [
+      { ns: ANDROID_NS, name: 'name', typed: name },
+      ...(ori == null ? [] : [{ ns: ANDROID_NS, name: 'screenOrientation', typed: ori }]),
+    ],
+  });
+  test('屏幕方向：按 Activity 声明统计出应用天然方向', () => {
+    // 红果那种「几十个 portrait + 一个 sensor 启动页」→ portrait
+    const hongguo = [
+      act('SplashActivity', 3), act('MainActivity', 1), act('ReaderActivity', 3),
+      act('WebActivity', 1), act('DetailActivity', 1),
+    ];
+    assert(detectOrientation(hongguo, hongguo[0]) === 'portrait', '多数声明 portrait 要判成竖屏');
+    // 墨读那种单 Activity 明确 landscape
+    const modu = [act('MainActivity', 2)];
+    assert(detectOrientation(modu, modu[0]) === 'landscape', '单 landscape 活动要判成横屏');
+    // 全 sensor / 全 unspecified → 无法判断，交给设置
+    const sensorOnly = [act('A', 3), act('B', 11), act('C', 0), act('D', 14)];
+    assert(detectOrientation(sensorOnly, sensorOnly[0]) === null, '全跟随重力时应返回 null');
+    assert(detectOrientation([act('A', null)], null) === null, '没声明方向时返回 null');
+    // 启动 Activity 加权：它决定用户看到的第一个画面
+    const launcherWins = [act('Launcher', 2), act('P1', 1), act('P2', 1), act('P3', 1)];
+    assert(detectOrientation(launcherWins, launcherWins[0]) === 'landscape', '启动 Activity 方向要加权');
+    // reversePortrait / userLandscape 这类也要归到正确的一边
+    assert(detectOrientation([act('A', 7)], null) === 'portrait', 'reversePortrait 属于竖屏');
+    assert(detectOrientation([act('A', 12)], null) === 'landscape', 'userLandscape 属于横屏');
+  });
+}
+
 console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
 process.exit(failed ? 1 : 0);

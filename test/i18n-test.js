@@ -37,9 +37,15 @@ for (const locale of locales) {
   if (locale !== 'zh-CN') assert.ok(!/\p{Script=Han}/u.test(profile));
 }
 setLocale('pt-BR');
-for (const file of ['index.html', 'shell.html']) {
+for (const file of ['index.html', 'shell.html', 'splash.html']) {
   const html = fs.readFileSync(path.join(__dirname, '../src/ui', file), 'utf8');
   for (const match of html.matchAll(/data-i18n(?:-[\w-]+)?="([^"]+)"/g)) {
+    assert.ok(Object.hasOwn(source, match[1]), `${file}: unknown key ${match[1]}`);
+  }
+}
+for (const file of ['main.js', 'core/doctor.js', 'ui/app.js', 'ui/shell.js', 'ui/splash.js']) {
+  const js = fs.readFileSync(path.join(__dirname, '../src', file), 'utf8');
+  for (const match of js.matchAll(/\b(?:tr|t)\('([^']+)'/g)) {
     assert.ok(Object.hasOwn(source, match[1]), `${file}: unknown key ${match[1]}`);
   }
 }

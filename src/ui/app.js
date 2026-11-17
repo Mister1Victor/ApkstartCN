@@ -141,6 +141,9 @@ function renderGrid() {
     return;
   }
 
+  // 末尾放一块「添加应用」虚线卡片。
+  // 目的不只是好看：应用少的时候下面是一大片空白，用户不知道该干什么；
+  // 这块卡片把「还能拖 APK 进来」这件事直接摆在眼前，也顺手填掉了空白。
   grid.innerHTML = apps.map((a) => `
     <div class="card" data-pkg="${esc(a.package)}" title="${esc(a.label)} · ${esc(a.package)}">
       ${a.pinned ? '<span class="pin">★</span>' : ''}
@@ -154,7 +157,7 @@ function renderGrid() {
       <div class="meta">${a.running ? tr('m0007') : `v${esc(a.versionName)}${a.lastLaunchAt ? ' · ' + relTime(a.lastLaunchAt) : ''}`}</div>
       <div class="open-hint">${a.running ? tr('m0008') : tr('m0009')}</div>
     </div>
-  `).join('');
+  `).join('') + tr('v058.m0046');
 }
 
 /* ---------------- 数据刷新 ---------------- */
@@ -199,7 +202,8 @@ async function refreshStatus() {
       tag.className = 'brand-tag';
     } else if (s.needsSetup === 'accel') {
       dot.className = 'dot warn';
-      text.textContent = tr('m0018');
+      // 说清「怎么修」而不是只说「没开」——这句是状态条上最容易被看到的位置
+      text.textContent = tr('v058.m0047');
       tag.textContent = tr('m0019');
       tag.className = 'brand-tag';
     } else if (s.needsSetup === 'sysimg') {
@@ -231,6 +235,22 @@ async function refreshStatus() {
       tag.className = 'brand-tag';
     }
     $('statusDevice').textContent = s.deviceOnline ? (s.serial || '') : '';
+    // 网络状态：这是用户最容易踩的坑（应用里一直「网络错误」，但看不出是虚拟机没网）。
+    // 直接摆在状态栏，出问题时一眼能看到，不用去翻日志。
+    const netEl = $('statusNet');
+    const netSep = $('statusNetSep');
+    if (netEl) {
+      const show = !!s.deviceOnline && !!s.network;
+      netEl.hidden = !show;
+      if (netSep) netSep.hidden = !show;
+      if (show) {
+        netEl.textContent = s.network.ok ? tr('v058.m0048', [s.network.ip || '']).trim() : tr('v058.m0049');
+        netEl.className = 'status-item status-net ' + (s.network.ok ? 'ok' : 'warn');
+        netEl.title = s.network.ok
+          ? tr('v058.m0050')
+          : tr('v058.m0051');
+      }
+    }
 
     renderSetup(s);
   } catch (e) {
@@ -379,7 +399,8 @@ async function deployAll() {
   setStepBusy('all', true);
   try {
     // 一次调用把 adb / 引擎 / 系统镜像全装完，进度统一显示在唯一那一行
-    const r = await api.autoDeploy();
+    // 用户点「一键部署」属于明确的手动重试，绕过失败冷却
+    const r = await api.autoDeploy({ force: true });
     if (!r || !r.ok) {
       toast({ title: tr('m0058'), body: (r && r.error) || tr('m0059'), type: 'error', sticky: true });
       return;
@@ -574,10 +595,15 @@ async function uninstall(pkg) {
 
 /* ---------------- 右键菜单 ---------------- */
 
-const MENU_ITEMS = [
+const menuItems = () => [
   { key: 'open', label: tr('m0105'), kbd: 'Enter' },
+  // 只在应用真的在运行时才出现（见 showMenu 里的过滤）。
+  // 以前完全没有这一项，独立窗口模式下又没有可点的关闭按钮，
+  // 应用一起来就关不掉，只能退到托盘退出整个 ApkStart。
+  { key: 'stop', label: tr('v058.m0052'), onlyRunning: true },
   { key: 'shortcut', label: tr('m0106') },
   { key: 'pin', label: tr('m0107') },
+  { key: 'keymap', label: tr('v058.m0053') },
   { divider: true },
   { key: 'reveal', label: tr('m0108') },
   { key: 'clear', label: tr('m0109') },
@@ -589,10 +615,11 @@ function showMenu(x, y, pkg) {
   const menu = $('ctxmenu');
   state.menuPkg = pkg;
   const app = state.apps.find((a) => a.package === pkg);
-  menu.innerHTML = MENU_ITEMS.map((it) => {
+  const items = menuItems().filter((it) => !it.onlyRunning || (app && app.running));
+  menu.innerHTML = items.map((it) => {
     if (it.divider) return '<div class="divider"></div>';
     const label = it.key === 'pin' ? (app && app.pinned ? tr('m0111') : tr('m0107')) : it.label;
-    return `<div class="item ${it.danger ? 'danger' : ''}" data-act="${it.key}">
+    return `<div class="item ${it.danger ? 'danger' : ''}" data-key="${it.key}" data-act="${it.key}">
       <span>${esc(label)}</span>${it.kbd ? `<span class="k">${it.kbd}</span>` : ''}
     </div>`;
   }).join('');
@@ -615,8 +642,22 @@ async function handleMenu(act) {
   if (!app) return;
   switch (act) {
     case 'open': return launchApp(pkg);
+    case 'stop': {
+      try {
+        const r = await api.stop(pkg);
+        if (r && r.ok) {
+          toast({ title: tr('v058.m0054'), body: app.label, type: 'ok' });
+        } else {
+          toast({ title: tr('v058.m0055'), body: (r && r.error) || tr('m0078'), type: 'error' });
+        }
+      } catch (e) {
+        toast({ title: tr('v058.m0055'), body: e.message, type: 'error' });
+      }
+      return refreshApps();
+    }
     case 'shortcut': return createShortcut(pkg);
     case 'pin': return api.pin(pkg, !app.pinned).then(refreshApps);
+    case 'keymap': return showKeymapPicker(pkg, app.label);
     case 'reveal': return api.revealApk(pkg);
     case 'clear': {
       if (!window.confirm(tr('m0113', [app.label]))) return;
@@ -630,6 +671,39 @@ async function handleMenu(act) {
     }
     case 'uninstall': return uninstall(pkg);
     default: return undefined;
+  }
+}
+
+/**
+ * 按键映射预设选择器。用 confirm + prompt 做最简交互（不引入新 UI 组件）。
+ * 后续可以做成更精致的弹窗编辑器。
+ */
+async function showKeymapPicker(pkg, label) {
+  try {
+    const presets = await api.keymap.getPresets();
+    const current = await api.keymap.getMap(pkg);
+    const hasCurrent = current && current.length > 0;
+    const lines = presets.map((p, i) => `${i + 1}. ${p.label} — ${p.desc}`);
+    if (hasCurrent) lines.unshift(tr('v058.m0057'));
+    const msg = tr('v058.m0058', [label, lines.join('\n')]);
+    const input = window.prompt(msg, hasCurrent ? '0' : '1');
+    if (input === null) return; // 取消
+    const idx = parseInt(input, 10);
+    if (hasCurrent && idx === 0) {
+      await api.keymap.setMap(pkg, []);
+      toast({ title: tr('v058.m0059'), body: label, type: 'ok' });
+      return;
+    }
+    const presetIdx = hasCurrent ? idx - 1 : idx;
+    if (presetIdx < 1 || presetIdx > presets.length) {
+      toast({ title: tr('v058.m0060'), type: 'error' });
+      return;
+    }
+    const chosen = presets[presetIdx - 1];
+    await api.keymap.applyPreset(pkg, chosen.id);
+    toast({ title: tr('v058.m0061', [chosen.label]), body: tr('v058.m0062', [label]), type: 'ok' });
+  } catch (e) {
+    toast({ title: tr('v058.m0063'), body: e.message, type: 'error' });
   }
 }
 
@@ -700,10 +774,223 @@ function bindAndroid() {
   $('btnAndroidApps').addEventListener('click', () => open('apps'));
 }
 
+/** 设置页字段同步：只剩自带运行时，所有资源项都露出来，不再按底座切换 */
+function syncBackendFields() {
+  const perf = $('perfGroup');
+  if (perf) perf.hidden = false;
+  refreshResources();
+}
+
+/** 本机资源上限 + 当前分配（设置页里那几行灰字） */
+async function refreshResources() {
+  const bNote = $('builtinResNote');
+  if (!bNote) return;
+  const gb = (mb) => (Number(mb) > 0 ? `${Math.round(Number(mb) / 1024)} GB` : tr('m0140'));
+  const r = await api.resources().catch(() => null);
+  if (!r || r.ok === false) {
+    bNote.textContent = (r && (r.note || r.error)) || tr('v058.m0064');
+    return;
+  }
+  const host = r.host || {};
+  const lim = r.limits || {};
+  const free = Number(r.freeMB) || Number((r.current && r.current.freeMB) || 0);
+  bNote.textContent = tr('v058.m0065', [gb(host.totalMB), host.cores])
+    + tr('v058.m0066', [gb(lim.maxMB), Math.max(1, (host.cores || 1) - 1)])
+    + tr('v058.m0067', [lim.maxGB || 0, free ? tr('v058.m0068', [(free / 1024).toFixed(1)]) : ''])
+    + (r.verdict && r.verdict.note ? ` ${r.verdict.note}` : '');
+}
+
+/** 本机体检：渲染报告（每条带等级点和可执行动作） */
+function renderPreflight(res) {
+  const list = $('preflightList');
+  const sum = $('preflightSummary');
+  const applyBtn = $('btnPreflightApply');
+  if (!list) return;
+  list.textContent = '';
+  if (!res || !res.report) {
+    if (sum) sum.textContent = (res && res.error) || tr('v058.m0069');
+    return;
+  }
+  const { report, edition } = res;
+  for (const it of report.items) {
+    const item = document.createElement('div');
+    item.className = 'pf-item';
+    const head = document.createElement('div');
+    head.className = 'pf-head';
+    const dot = document.createElement('span');
+    dot.className = `pf-dot ${it.level}`;
+    const title = document.createElement('span');
+    title.className = 'pf-title';
+    title.textContent = it.title;
+    head.append(dot, title);
+    item.append(head);
+    if (it.detail) {
+      const d = document.createElement('div');
+      d.className = 'pf-detail';
+      d.textContent = it.detail;
+      item.append(d);
+    }
+    if (it.action && it.action.kind === 'elevate') {
+      const wrap = document.createElement('div');
+      wrap.className = 'pf-action';
+      const btn = document.createElement('button');
+      btn.className = 'btn ghost sm';
+      btn.textContent = it.action.label;
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const old = btn.textContent;
+        btn.textContent = tr('v058.m0070');
+        let r = null;
+        if (it.action.id === 'accel') r = await api.enableAccel().catch(() => null);
+        else r = await api.enableVirtualization().catch(() => null);
+        btn.disabled = false;
+        btn.textContent = old;
+        if (!r) { toast({ type: 'error', title: tr('v058.m0071'), body: tr('v058.m0072') }); return; }
+        if (r.cancelled) toast({ type: 'warn', title: tr('v058.m0073'), body: tr('v058.m0074') });
+        else if (r.ok || r.already) {
+          const reboot = r.restartNeeded === true;
+          toast({
+            type: 'ok',
+            title: r.already ? tr('v058.m0075') : (reboot ? tr('v058.m0076') : tr('m0123')),
+            body: r.already ? '' : (reboot ? tr('v058.m0077') : tr('v058.m0078')),
+          });
+          if (r.already || !reboot) setTimeout(() => runPreflight().catch(() => {}), 1200);
+        } else {
+          toast({ type: 'error', title: tr('v058.m0079'), body: (r.error || r.note || tr('v058.m0080')) });
+        }
+      });
+      wrap.append(btn);
+      item.append(wrap);
+    } else if (it.action && it.action.kind === 'manual') {
+      const wrap = document.createElement('div');
+      wrap.className = 'pf-action pf-detail';
+      wrap.textContent = `⚠ ${it.action.label}`;
+      item.append(wrap);
+    }
+    list.append(item);
+  }
+  const rec = report.recommended || {};
+  if (sum) {
+    sum.textContent = tr('v058.m0081', [report.summary, Math.round((rec.memoryMB || 0) / 1024)])
+      + tr('v058.m0082', [rec.cores || 2, rec.renderSize || 'auto', rec.gpuMode || 'auto'])
+      + (edition === 'store' ? tr('v058.m0083') : '');
+  }
+  if (applyBtn) applyBtn.hidden = false;
+}
+
+async function runPreflight() {
+  const btn = $('btnPreflight');
+  const sum = $('preflightSummary');
+  if (!btn) return null;
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = tr('v058.m0084');
+  if (sum) sum.textContent = tr('v058.m0085');
+  let r = null;
+  try {
+    r = await api.preflightRun();
+  } catch (e) {
+    r = { error: e.message || tr('v058.m0086') };
+  }
+  btn.disabled = false;
+  btn.textContent = old;
+  renderPreflight(r);
+  return r;
+}
+
+/** 驱动（兼容补丁）：渲染清单 + 命中状态 */
+function renderDrivers(r) {
+  const list = $('drvList');
+  const sum = $('drvSummary');
+  if (!list) return;
+  const host = (r && r.host) || {};
+  const drivers = (r && r.drivers) || [];
+  const errors = (r && r.errors) || [];
+  const onCount = drivers.filter((d) => d.enabled && d.matched).length;
+  if (sum) {
+    const accel = host.accel === 'none' ? tr('v058.m0087') : (host.accel || tr('m0140'));
+    sum.textContent = tr('v058.m0088', [host.platform || '', host.arch || '', host.gpuVendor || tr('m0140'), accel])
+      + tr('v058.m0089', [host.emulatorVersion || tr('m0140'), drivers.length, onCount])
+      + (errors.length ? tr('v058.m0090', [errors.length]) : '');
+  }
+  list.textContent = '';
+  for (const d of drivers) {
+    const item = document.createElement('div');
+    item.className = d.enabled ? 'drv-item on' : 'drv-item';
+
+    const head = document.createElement('div');
+    head.className = 'drv-head';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!d.enabled;
+    cb.addEventListener('change', async () => {
+      const res = await api.driversSetEnabled(d.id, cb.checked).catch(() => null);
+      if (res && res.ok && res.overview) renderDrivers(res.overview);
+      else { cb.checked = !cb.checked; toast({ type: 'error', title: tr('m0274'), body: (res && res.error) || tr('v058.m0091') }); }
+    });
+    const name = document.createElement('span');
+    name.className = 'drv-name';
+    name.textContent = d.name;
+    head.append(cb, name);
+
+    if (d.matched && d.enabled) {
+      const b = document.createElement('span');
+      b.className = 'drv-badge hit';
+      b.textContent = tr('m0123');
+      head.append(b);
+    }
+    if (d.builtin) {
+      const b = document.createElement('span');
+      b.className = 'drv-badge';
+      b.textContent = tr('v058.m0092');
+      head.append(b);
+    }
+    item.append(head);
+
+    const meta = document.createElement('div');
+    meta.className = 'drv-meta';
+    meta.textContent = `v${d.version || '?'}`
+      + (d.author ? ` · ${d.author}` : '')
+      + ` · priority ${d.priority}`
+      + (d.hits && d.hits.length ? tr('v058.m0093', [d.hits.join(' / ')]) : tr('v058.m0094'));
+    item.append(meta);
+
+    if (d.description) {
+      const desc = document.createElement('div');
+      desc.className = 'drv-meta';
+      desc.textContent = d.description;
+      item.append(desc);
+    }
+    list.append(item);
+  }
+  for (const e of errors) {
+    const err = document.createElement('div');
+    err.className = 'drv-err';
+    err.textContent = `${String(e.file || '').split(/[\\/]/).pop()}：${(e.errors || []).join('；')}`;
+    list.append(err);
+  }
+  if (!drivers.length && !errors.length) {
+    const empty = document.createElement('div');
+    empty.className = 'drv-meta';
+    empty.textContent = tr('v058.m0095');
+    list.append(empty);
+  }
+}
+
+async function refreshDrivers() {
+  if (!$('drvList')) return;
+  const r = await api.driversList().catch(() => null);
+  if (!r) {
+    if ($('drvSummary')) $('drvSummary').textContent = tr('v058.m0096');
+    return;
+  }
+  renderDrivers(r);
+}
+
 function fillSettings(s) {
-  $('setEngineMode').value = s.engine.mode;
+  syncBackendFields();
+  refreshDrivers().catch(() => {});
   $('setAdbPath').value = s.adbPath || '';
-  $('setDevice').value = s.device || '';
   $('setSystemImage').value = s.runtime.isoPath || '';
   $('setMemory').value = s.engine.memoryMB;
   $('setCores').value = s.engine.cores;
@@ -723,6 +1010,7 @@ function fillSettings(s) {
   $('setMouseWheelMode').value = ['smooth', 'native', 'off'].includes(s.engine.mouseWheelMode)
     ? s.engine.mouseWheelMode : 'smooth';
   $('setMouseSideButtons').checked = !!s.engine.mouseSideButtons;
+  if ($('setKeymapEnabled')) $('setKeymapEnabled').checked = s.engine.keymapEnabled !== false;
   $('setCompat').checked = !!(s.runtime && s.runtime.compatImage);
   $('setAutoShortcut').checked = !!s.createShortcutOnInstall;
   $('setStartMenuShortcut').checked = s.createStartMenuShortcut !== false;
@@ -736,9 +1024,16 @@ function fillSettings(s) {
   if ($('setRenderSize')) $('setRenderSize').value = eng.renderSize || 'auto';
   if ($('setDataGB')) $('setDataGB').value = String(Number(eng.dataPartitionGB || 0));
   if ($('setFastDns')) $('setFastDns').checked = eng.fastDns !== false;
+  if ($('setLocale')) $('setLocale').value = eng.locale || 'zh-CN';
+  if ($('setChineseIme')) $('setChineseIme').checked = eng.chineseIme !== false;
   if ($('setKeepSnapshot')) $('setKeepSnapshot').checked = eng.keepSnapshot !== false;
   $('setDisplayMode').value = d.mode === 'fullscreen' ? 'fullscreen' : 'window';
+  if ($('setAutoFullscreen')) $('setAutoFullscreen').value = d.autoFullscreenOnLaunch === true ? 'on' : 'off';
+  if ($('setLandscape')) $('setLandscape').value = d.landscape === true ? 'landscape' : 'portrait';
+  if ($('setOrientationMode')) $('setOrientationMode').value = d.orientationMode || 'auto';
+  if ($('setTabletMode')) $('setTabletMode').value = d.tabletMode === false ? 'off' : 'on';
   $('setPortrait').value = d.portrait || '900x1600';
+  if ($('setWindowEmbed')) $('setWindowEmbed').value = d.windowEmbed === false ? 'detached' : 'embed';
   $('portraitField').hidden = $('setDisplayMode').value === 'fullscreen';
 }
 
@@ -749,10 +1044,17 @@ async function refreshDataInfo() {
   const info = await api.dataInfo().catch(() => null);
   if (!info) { el.textContent = tr('m0138'); return; }
   const auto = Number(($('setDataGB') || {}).value || 0) === 0;
-  const img = info.imageGB ? `${info.imageGB} GB` : tr('m0139');
+  // 有 quickboot 差量盘时底座镜像的大小不等于 guest 看到的容量（实测 8GB 镜像、guest 5.7GB），
+  // 与其显示一个会误导人的数字，不如明确说「以运行时为准」。
+  const img = info.overlay
+    ? tr('v058.m0097')
+    : (info.fsGB ? tr('v058.m0098', [info.fsGB]) : (info.imageGB ? `${info.imageGB} GB` : tr('m0139')));
   const free = info.freeDiskMB ? `${(info.freeDiskMB / 1024).toFixed(1)} GB` : tr('m0140');
-  el.textContent = tr('m0141', [img, auto ? tr('m0142') : '', free])
-    + tr('m0143');
+  const pending = Number(info.pendingGB) > 0
+    ? tr('v058.m0099', [info.configuredGB])
+    : '';
+  el.textContent = tr('v058.m0100', [img, auto ? tr('m0142') : '', free, pending])
+    + tr('v058.m0101');
 }
 
 async function openSettings() {
@@ -927,12 +1229,59 @@ function bindSettings() {
     state.settings = await api.setSettings(patch);
   };
 
-  $('setEngineMode').addEventListener('change', (e) => save({ engine: { mode: e.target.value } }));
+  if ($('btnPreflight')) $('btnPreflight').addEventListener('click', () => runPreflight());
+  if ($('btnPreflightApply')) {
+    $('btnPreflightApply').addEventListener('click', async () => {
+      const btn = $('btnPreflightApply');
+      btn.disabled = true;
+      const r = await api.preflightApply().catch(() => null);
+      btn.disabled = false;
+      if (!r || !r.ok) {
+        toast({ type: 'error', title: tr('v058.m0102'), body: (r && r.error) || tr('v058.m0091') });
+        return;
+      }
+      state.settings = r.settings;
+      toast({
+        type: 'ok',
+        title: tr('v058.m0104'),
+        body: tr('v058.m0105', [Math.round((r.recommended.memoryMB || 0) / 1024), r.recommended.cores, r.recommended.renderSize])
+          + (r.driverFile ? tr('v058.m0106') : ''),
+      });
+      if (r.driverError) toast({ type: 'warn', title: tr('v058.m0107'), body: r.driverError });
+      fillSettings(r.settings);
+      refreshStatus();
+    });
+  }
+  if ($('btnDrvReload')) $('btnDrvReload').addEventListener('click', () => refreshDrivers());
+  if ($('btnDrvFolder')) {
+    $('btnDrvFolder').addEventListener('click', async () => {
+      const r = await api.driversOpenFolder().catch(() => null);
+      if (!r || !r.ok) toast({ type: 'error', title: tr('v058.m0108') });
+    });
+  }
+  if ($('btnDrvImport')) {
+    $('btnDrvImport').addEventListener('click', async () => {
+      const r = await api.driversImport().catch(() => null);
+      if (!r || r.canceled) return;
+      if (!r.ok) {
+        toast({ type: 'error', title: tr('m0311'), body: (r.errors || []).slice(0, 3).join('；') });
+        return;
+      }
+      toast({ type: 'ok', title: tr('v058.m0109'), body: `${r.driver.name} v${r.driver.version}` });
+      if (r.overview) renderDrivers(r.overview);
+    });
+  }
+  if ($('btnDrvExport')) {
+    $('btnDrvExport').addEventListener('click', async () => {
+      const r = await api.driversExportTemplate().catch(() => null);
+      if (!r || r.canceled) return;
+      if (!r.ok) { toast({ type: 'error', title: tr('m0205') }); return; }
+      toast({ type: 'ok', title: tr('v058.m0110'), body: tr('v058.m0111') });
+      refreshDrivers();
+    });
+  }
+
   $('setAdbPath').addEventListener('change', (e) => save({ adbPath: e.target.value.trim() }));
-  $('setDevice').addEventListener('change', async (e) => {
-    await save({ device: e.target.value.trim() });
-    refreshStatus();
-  });
   $('setSystemImage').addEventListener('change', (e) => save({ runtime: { isoPath: e.target.value.trim() } }));
   // 内存 / 核心：填了具体值就关掉「自动」，填 0 又回到自动。
   // 旧代码只写 memoryMB，而 overridesFromSettings 只在 autoMemory=false 时才认它，
@@ -958,6 +1307,22 @@ function bindSettings() {
   }
   if ($('setFastDns')) {
     $('setFastDns').addEventListener('change', (e) => save({ engine: { fastDns: e.target.checked } }));
+  }
+  if ($('setLocale')) {
+    $('setLocale').addEventListener('change', async (e) => {
+      state.settings = await api.setSettings({ engine: { locale: e.target.value } });
+      toast({ title: tr('v058.m0112'), body: tr('v058.m0113'), type: 'ok' });
+    });
+  }
+  if ($('setChineseIme')) {
+    $('setChineseIme').addEventListener('change', async (e) => {
+      state.settings = await api.setSettings({ engine: { chineseIme: e.target.checked } });
+      toast({
+        title: e.target.checked ? tr('v058.m0114') : tr('v058.m0115'),
+        body: tr('v058.m0113'),
+        type: 'ok',
+      });
+    });
   }
   if ($('setKeepSnapshot')) {
     $('setKeepSnapshot').addEventListener('change', (e) => save({ engine: { keepSnapshot: e.target.checked } }));
@@ -985,10 +1350,35 @@ function bindSettings() {
       const r = await api.setDataSize(gb).catch((e) => ({ ok: false, error: e.message }));
       $('btnGrowData').disabled = false;
       $('btnGrowData').textContent = old;
+      if (r && !r.ok && r.needsReset) {
+        // 快速启动的差量盘挡着：就地扩容做不到，只能按新容量重建 /data。
+        // 这是明确的数据丢失操作，必须单独再确认一次。
+        const again = await api.confirm({
+          title: tr('v058.m0117'),
+          message: tr('v058.m0118', [gb]),
+          detail: tr('v058.m0119'),
+          okLabel: tr('v058.m0120'),
+        });
+        if (again.response !== 1) { refreshDataInfo(); return; }
+        $('btnGrowData').disabled = true;
+        $('btnGrowData').textContent = tr('v058.m0121');
+        const rr = await api.resetAndResize(gb).catch((e) => ({ ok: false, error: e.message }));
+        $('btnGrowData').disabled = false;
+        $('btnGrowData').textContent = old;
+        toast({
+          type: rr && rr.ok ? 'ok' : 'error',
+          title: rr && rr.ok ? tr('v058.m0122') : tr('v058.m0123'),
+          body: rr && rr.ok
+            ? tr('v058.m0124', [gb])
+            : (rr && rr.error) || tr('m0078'),
+        });
+        refreshDataInfo();
+        return;
+      }
       toast({
         type: r && r.ok ? 'ok' : 'error',
         title: r && r.ok ? tr('m0187') : tr('m0188'),
-        body: r && r.ok ? tr('m0189', [r.imageGB || gb]) : (r && r.error) || tr('m0078'),
+        body: r && r.ok ? tr('m0189', [r.fsGB || r.imageGB || gb]) : (r && r.error) || tr('m0078'),
       });
       refreshDataInfo();
     });
@@ -1025,6 +1415,12 @@ function bindSettings() {
   $('setMouseRightBack').addEventListener('change', (e) => savePointer({ mouseRightBack: e.target.checked }));
   $('setMouseWheelMode').addEventListener('change', (e) => savePointer({ mouseWheelMode: e.target.value }));
   $('setMouseSideButtons').addEventListener('change', (e) => savePointer({ mouseSideButtons: e.target.checked }));
+  if ($('setKeymapEnabled')) {
+    $('setKeymapEnabled').addEventListener('change', async (e) => {
+      await api.keymap.setEnabled(e.target.checked);
+      toast({ title: e.target.checked ? tr('v058.m0125') : tr('v058.m0126'), type: 'ok' });
+    });
+  }
   $('setDeepTrim').addEventListener('change', async (e) => {
     await save({ engine: { deepTrim: e.target.checked } });
     // 关掉深度裁剪必须把之前 pm disable-user 的包恢复回来，否则影响是持久的
@@ -1053,9 +1449,60 @@ function bindSettings() {
     state.settings = await api.setSettings({ display: { mode } });
     toast({ title: mode === 'fullscreen' ? tr('m0197') : tr('m0198'), type: 'ok' });
   });
+  if ($('setAutoFullscreen')) {
+    $('setAutoFullscreen').addEventListener('change', async (e) => {
+      const on = e.target.value === 'on';
+      state.settings = await api.setSettings({ display: { autoFullscreenOnLaunch: on } });
+      toast({ title: on ? tr('v058.m0127') : tr('v058.m0128'), body: tr('v058.m0129'), type: 'ok' });
+    });
+  }
+  if ($('setOrientationMode')) {
+    $('setOrientationMode').addEventListener('change', async (e) => {
+      const mode = e.target.value;
+      state.settings = await api.setSettings({ display: { orientationMode: mode } });
+      toast({
+        title: mode === 'auto' ? tr('v058.m0130') : (mode === 'landscape' ? tr('v058.m0131') : tr('v058.m0132')),
+        body: mode === 'auto'
+          ? tr('v058.m0133')
+          : tr('v058.m0134'),
+        type: 'ok',
+      });
+    });
+  }
+  if ($('setTabletMode')) {
+    $('setTabletMode').addEventListener('change', async (e) => {
+      const on = e.target.value === 'on';
+      state.settings = await api.setSettings({ display: { tabletMode: on } });
+      toast({
+        title: on ? tr('v058.m0135') : tr('v058.m0136'),
+        body: tr('v058.m0137'),
+        type: 'ok',
+      });
+    });
+  }
+  if ($('setLandscape')) {
+    $('setLandscape').addEventListener('change', async (e) => {
+      const landscape = e.target.value === 'landscape';
+      state.settings = await api.setSettings({ display: { landscape } });
+      toast({
+        title: landscape ? tr('v058.m0138') : tr('v058.m0139'),
+        body: tr('v058.m0140'),
+        type: 'ok',
+      });
+    });
+  }
   $('setPortrait').addEventListener('change', async (e) => {
     state.settings = await api.setSettings({ display: { portrait: e.target.value } });
     toast({ title: tr('m0199'), body: tr('m0200'), type: 'ok' });
+  });
+  $('setWindowEmbed').addEventListener('change', async (e) => {
+    const embed = e.target.value === 'embed';
+    state.settings = await api.setSettings({ display: { windowEmbed: embed } });
+    toast({
+      title: embed ? tr('v058.m0141') : tr('v058.m0142'),
+      body: tr('v058.m0143'),
+      type: 'ok',
+    });
   });
   $('btnRebuildShortcuts').addEventListener('click', async () => {
     const r = await api.rebuildShortcuts();
@@ -1381,20 +1828,6 @@ function bindSettings() {
     });
   }
 
-  $('btnProbe').addEventListener('click', async () => {
-    const el = $('probeResult');
-    el.textContent = tr('m0297');
-    const found = await api.runtimeProbe();
-    if (!found.length) {
-      el.textContent = tr('m0298');
-      return;
-    }
-    el.textContent = tr('m0299', [found.map((f) => f.name).join(', ')]);
-    await api.setSettings({ device: found[0].serial });
-    $('setDevice').value = found[0].serial;
-    refreshStatus();
-  });
-
   $('btnRuntimeStart').addEventListener('click', async () => {
     const el = $('probeResult');
     el.textContent = tr('m0300');
@@ -1531,7 +1964,11 @@ function bindEvents() {
 
   $('grid').addEventListener('click', (e) => {
     const card = e.target.closest('.card');
-    if (card) launchApp(card.dataset.pkg);
+    if (!card) return;
+    // 「添加应用」卡片没有 data-pkg，走安装流程而不是启动。
+    // 直接转调工具栏那个「安装 APK」按钮，复用它的文件选择逻辑。
+    if (card.classList.contains('card-add')) { $('btnInstall').click(); return; }
+    if (card.dataset.pkg) launchApp(card.dataset.pkg);
   });
 
   $('grid').addEventListener('contextmenu', (e) => {
@@ -1604,6 +2041,8 @@ function bindEvents() {
   });
   api.on('toast', (p) => toast({ title: p.message, type: p.type === 'error' ? 'error' : 'info' }));
   api.on('app:launched', () => setTimeout(refreshApps, 800));
+  // 应用被关掉（托盘「关闭当前应用」、右键菜单、或窗口被关）后要刷新「运行中」标记
+  api.on('apps:changed', () => setTimeout(refreshApps, 300));
   api.on('runtime:log', (m) => console.log('[runtime]', m));
   api.on('ui:navigate', (v) => {
     if (v === 'settings') openSettings();
@@ -1806,8 +2245,23 @@ async function fixIssue(issue) {
       if (r.ok) {
         t.update({ title: tr('m0070'), body: r.restartNeeded ? tr('m0359') : (r.note || ''), type: 'ok' });
         setTimeout(t.dismiss, 3200);
+      } else if (r.manual) {
+        // 商店（MSIX）版：包固定 mediumIL，通常拿不到管理员授权。
+        // 与其让用户点一个注定失败的按钮，不如直接把「启用或关闭 Windows 功能」
+        // 对话框弹出来，并告诉他勾哪一项。
+        t.dismiss();
+        await api.openWindowsFeatures?.().catch(() => null);
+        toast({
+          title: tr('v058.m0144'),
+          body: r.note || tr('v058.m0145'),
+          type: 'info',
+          sticky: true,
+        });
+      } else if (r.cancelled) {
+        t.update({ title: tr('v058.m0073'), body: r.error || tr('v058.m0147'), type: 'info', spinner: false });
+        setTimeout(t.dismiss, 4200);
       } else {
-        t.update({ title: tr('m0360'), body: r.error || tr('m0226'), type: 'error', sticky: true });
+        t.update({ title: tr('m0360'), body: r.error || r.note || tr('m0226'), type: 'error', sticky: true });
       }
       break;
     }

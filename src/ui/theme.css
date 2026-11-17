@@ -161,6 +161,50 @@ html, body {
   box-shadow: 0 2px 8px rgba(15, 157, 99, .4);
 }
 
+/* ---------------- 「添加应用」虚线卡片 ----------------
+ * 应用少的时候网格下面是一大片空白，用户也不知道还能干什么。
+ * 这块卡片把「拖 APK 进来」摆到眼前，同时把空白填掉。
+ * 用虚线 + 弱化配色，让它看起来是「空位」而不是又一个已经装好的应用。 */
+
+.card-add {
+  background: transparent;
+  border: 1.5px dashed var(--line-strong);
+  box-shadow: none;
+  color: var(--muted);
+  justify-content: center;
+  min-height: 178px;
+}
+.card-add:hover {
+  border-color: rgba(15, 157, 99, .55);
+  border-style: dashed;
+  background: rgba(18, 184, 134, .05);
+  box-shadow: none;
+  color: var(--brand-dark);
+}
+.card-add:active { transform: translateY(0); }
+.card-add:focus-visible {
+  outline: none;
+  border-color: rgba(15, 157, 99, .6);
+  box-shadow: var(--ring);
+}
+
+.card-add .add-plus {
+  width: 52px; height: 52px;
+  margin-bottom: 10px;
+  border-radius: 16px;
+  display: grid; place-items: center;
+  color: var(--faint);
+  background: rgba(20, 32, 26, .045);
+  transition: background .16s ease, color .16s ease, transform .16s ease;
+}
+.card-add:hover .add-plus {
+  color: var(--brand);
+  background: rgba(18, 184, 134, .14);
+  transform: translateY(-1px);
+}
+.card-add .name { font-weight: 600; }
+.card-add .meta { color: var(--faint); }
+
 /* ---------------- 状态栏 ---------------- */
 
 .statusbar {
@@ -170,6 +214,22 @@ html, body {
 }
 
 .dot { box-shadow: 0 0 0 3px rgba(18, 184, 134, .14); }
+
+/* 状态栏里的网络指示：绿灯=已联网，黄灯=虚拟机没网。
+ * 这个坑很隐蔽（应用里只显示「网络错误」，看不出是虚拟机的事），所以放在最显眼处。 */
+.status-net::before {
+  content: '';
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: currentColor;
+}
+.status-net.ok { color: var(--brand-ink); }
+.status-net.ok::before { background: var(--brand); box-shadow: 0 0 0 3px rgba(18, 184, 134, .16); }
+.status-net.warn { color: #9a6b00; }
+.status-net.warn::before { background: #e0a100; box-shadow: 0 0 0 3px rgba(224, 161, 0, .16); }
 
 /* ---------------- 模态框 ---------------- */
 

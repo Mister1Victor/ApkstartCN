@@ -21,11 +21,11 @@ const { diskRequiredMB, diskVerdict, hostProfile, memoryLimits, memVerdict, disk
 class BuiltinBackend extends Backend {
   static get id() { return 'builtin'; }
 
-  static get label() { return '自带运行时（Android Emulator + QEMU）'; }
+  static get label() { return 'Yerleşik çalışma zamanı (Android Emulator + QEMU)'; }
 
   static get summary() {
-    return '零第三方依赖：apkstart 自己下载并管理 Android 14 镜像，ARM 应用走镜像自带的翻译层。'
-      + '首次启动约 25 秒，之后靠 quickboot 快照秒进。';
+    return 'Üçüncü taraf bağımlılığı yok: apkstart Android 14 imajını kendi indirip yönetir; ARM uygulamalar imajın kendi çeviri katmanıyla çalışır.'
+      + 'İlk açılış ~25 sn, sonrasında quickboot anlık görüntüsüyle saniyeler içinde açılır.';
   }
 
   static get embedCapable() { return true; }
@@ -53,28 +53,28 @@ class BuiltinBackend extends Backend {
   running() { return !!(this.rt && this.rt.emuRunning); }
 
   async probe() {
-    if (!this.rt) return { ok: false, found: false, detail: '运行时未初始化' };
+    if (!this.rt) return { ok: false, found: false, detail: 'Çalışma zamanı başlatılmadı' };
     const p = this.rt.provisioner.paths();
     const found = fs.existsSync(p.emulatorExe) || fs.existsSync(p.adbExe);
     return { ok: true, found, path: p.emulatorExe, detail: p.root };
   }
 
   async check() {
-    if (!this.rt) return { ok: false, reason: '运行时未初始化' };
+    if (!this.rt) return { ok: false, reason: 'Çalışma zamanı başlatılmadı' };
     const env = await this.rt.provisioner.checkEnv().catch(() => null);
-    if (!env) return { ok: false, reason: '运行时探测失败' };
-    if (!env.adb.ok) return { ok: false, reason: '缺 adb', needs: 'adb' };
-    if (!env.emulator.ok) return { ok: false, reason: '缺 Android Emulator', needs: 'emulator' };
-    if (!env.sysimg.ok) return { ok: false, reason: '缺系统镜像', needs: 'sysimg' };
+    if (!env) return { ok: false, reason: 'Çalışma zamanı algılanamadı' };
+    if (!env.adb.ok) return { ok: false, reason: 'adb eksik', needs: 'adb' };
+    if (!env.emulator.ok) return { ok: false, reason: 'Android Emulator eksik', needs: 'emulator' };
+    if (!env.sysimg.ok) return { ok: false, reason: 'Sistem imajı eksik', needs: 'sysimg' };
     return { ok: true, env };
   }
 
   async resolveAdb() { return this.rt ? this.rt.adbPath() : ''; }
 
   async ensure({ onLog = () => {} } = {}) {
-    if (!this.rt) return { ok: false, error: '运行时未初始化' };
+    if (!this.rt) return { ok: false, error: 'Çalışma zamanı başlatılmadı' };
     const r = await this.rt.ensure({ onLog });
-    if (!r || !r.ok) return { ok: false, error: (r && r.error) || '安卓运行时未能启动' };
+    if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'Android çalışma zamanı başlatılamadı' };
     // serial 用可写字段（见 syncSerial 的说明），ensure 成功后同步一次
     this.syncSerial();
     this.adbPath = this.rt.adbPath();
@@ -100,13 +100,13 @@ class BuiltinBackend extends Backend {
   }
 
   async stop({ graceful = true } = {}) {
-    if (!this.rt) return { ok: false, error: '运行时未初始化' };
+    if (!this.rt) return { ok: false, error: 'Çalışma zamanı başlatılmadı' };
     const ok = await this.rt.stop({ graceful }).catch((e) => ({ error: e.message }));
     return { ok: ok !== false };
   }
 
   async install(component, onProgress = () => {}) {
-    if (!this.rt) return { ok: false, error: '运行时未初始化' };
+    if (!this.rt) return { ok: false, error: 'Çalışma zamanı başlatılmadı' };
     const prov = this.rt.provisioner;
     switch (component) {
       case 'runtime': return prov.installRuntimePack(onProgress);
@@ -116,7 +116,7 @@ class BuiltinBackend extends Backend {
       case 'playimg': return prov.installPlayImage(onProgress);
       case 'aehd': return prov.installAehd(onProgress);
       case 'qemu': return prov.installQemu(onProgress);
-      default: return { ok: false, error: `未知组件 ${component}` };
+      default: return { ok: false, error: `Bilinmeyen bileşen: ${component}` };
     }
   }
 
@@ -149,8 +149,8 @@ class BuiltinBackend extends Backend {
       freeMB,
       pending: false,
       verdict: memVerdict(memMB, host.totalMB),
-      note: '自带运行时的内存/CPU 下次启动安卓生效；数据分区改大后点「立即扩容」——'
-        + '能就地扩就保留已装应用，安卓正在用快速启动差量盘时会提示你重置后按新容量重建。',
+      note: 'Yerleşik çalışma zamanının bellek/CPU ayarı sonraki Android açılışında geçerli olur; veri bölümünü büyüttükten sonra 「Şimdi genişlet」e basın —'
+        + 'yerinde genişletilebiliyorsa kurulu uygulamalar korunur; Android hızlı başlatma fark diskini kullanıyorsa sıfırlayıp yeni kapasiteyle yeniden oluşturmanız istenir.',
     };
   }
 
@@ -168,8 +168,8 @@ class BuiltinBackend extends Backend {
     if (capGB && capGB * 1024 < need) {
       return {
         ok: false,
-        message: `安卓数据分区不足：当前 ${capGB} GB，这个游戏建议至少 ${Math.ceil(need / 1024)} GB。`
-          + '请在设置 → 引擎里把「数据分区容量」调大后重启安卓（会就地扩容，不丢已装应用）。',
+        message: `Android veri bölümü yetersiz: şu an ${capGB} GB, bu oyun için en az ${Math.ceil(need / 1024)} GB önerilir.`
+          + 'Ayarlar → Motor bölümünden 「Veri bölümü kapasitesi」ni büyütüp Android\'i yeniden başlatın (yerinde genişletilir, kurulu uygulamalar kaybolmaz).',
       };
     }
     return { ok: true, requiredMB: need };

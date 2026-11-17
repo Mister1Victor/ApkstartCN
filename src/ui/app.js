@@ -35,10 +35,10 @@ function fmtSize(bytes) {
 function relTime(ts) {
   if (!ts) return '';
   const d = Date.now() - ts;
-  if (d < 60000) return '刚刚';
-  if (d < 3600000) return `${Math.floor(d / 60000)} 分钟前`;
-  if (d < 86400000) return `${Math.floor(d / 3600000)} 小时前`;
-  if (d < 86400000 * 30) return `${Math.floor(d / 86400000)} 天前`;
+  if (d < 60000) return 'az önce';
+  if (d < 3600000) return `${Math.floor(d / 60000)} dakika önce`;
+  if (d < 86400000) return `${Math.floor(d / 3600000)} saat önce`;
+  if (d < 86400000 * 30) return `${Math.floor(d / 86400000)} gün önce`;
   return new Date(ts).toLocaleDateString('zh-CN');
 }
 
@@ -134,8 +134,8 @@ function renderGrid() {
   if (!hasAny) {
     const s = state.status;
     $('emptyHint').textContent = s && s.adbOk === false
-      ? '首次使用：打开右上角设置 → 运行时 → 一键完成，再回来安装应用即可。'
-      : '提示：所有应用共享同一个 Android 运行时，所以第二个应用的启动几乎是瞬时的。';
+      ? 'İlk kullanım: sağ üstteki ayarlar → Çalışma zamanı → Tek tıkla tamamla, sonra dönüp uygulama kurabilirsiniz.'
+      : 'İpucu: tüm uygulamalar aynı Android çalışma zamanını paylaşır, bu yüzden ikinci uygulama neredeyse anında açılır.';
     grid.innerHTML = '';
     return;
   }
@@ -146,24 +146,24 @@ function renderGrid() {
   grid.innerHTML = apps.map((a) => `
     <div class="card" data-pkg="${esc(a.package)}" title="${esc(a.label)} · ${esc(a.package)}">
       ${a.pinned ? '<span class="pin">★</span>' : ''}
-      ${a.running ? '<span class="badge-run" title="正在运行"></span>' : ''}
+      ${a.running ? '<span class="badge-run" title="Çalışıyor"></span>' : ''}
       <div class="icon">
         ${a.iconUrl
           ? `<img src="${esc(a.iconUrl)}" alt="" draggable="false" />`
           : `<div class="fallback" style="background:${esc(a.accent || '#9aa6b2')}">${esc(initialOf(a.label))}</div>`}
       </div>
       <div class="name">${esc(a.label)}</div>
-      <div class="meta">${a.running ? '运行中' : `v${esc(a.versionName)}${a.lastLaunchAt ? ' · ' + relTime(a.lastLaunchAt) : ''}`}</div>
-      <div class="open-hint">${a.running ? '切换到前台' : '打开'}</div>
+      <div class="meta">${a.running ? 'Çalışıyor' : `v${esc(a.versionName)}${a.lastLaunchAt ? ' · ' + relTime(a.lastLaunchAt) : ''}`}</div>
+      <div class="open-hint">${a.running ? 'Öne getir' : 'Aç'}</div>
     </div>
   `).join('') + `
-    <div class="card card-add" id="cardAdd" role="button" tabindex="0" title="拖入 APK 文件，或点击选择">
+    <div class="card card-add" id="cardAdd" role="button" tabindex="0" title="APK dosyalarını sürükleyin veya seçmek için tıklayın">
       <div class="add-plus" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round"><path d="M12 6v12"/><path d="M6 12h12"/></svg>
       </div>
-      <div class="name">添加应用</div>
-      <div class="meta">拖入 APK 即可安装</div>
+      <div class="name">Uygulama ekle</div>
+      <div class="meta">Kurmak için APK'yı sürükleyin</div>
     </div>
   `;
 }
@@ -182,7 +182,7 @@ async function refreshApps() {
 
 function updateStats() {
   const n = state.apps.length;
-  $('statusStats').textContent = n ? `${n} 个应用` : '暂无应用';
+  $('statusStats').textContent = n ? `${n} uygulama` : 'Henüz uygulama yok';
 }
 
 async function refreshStatus() {
@@ -195,51 +195,51 @@ async function refreshStatus() {
 
     if (!s.adbOk) {
       dot.className = 'dot err';
-      text.textContent = '运行时未部署 —— 打开设置 → 运行时，一键完成';
-      tag.textContent = '需要部署';
+      text.textContent = 'Çalışma zamanı kurulmadı —— Ayarlar → Çalışma zamanı, tek tıkla tamamla';
+      tag.textContent = 'Kurulum gerekli';
       tag.className = 'brand-tag';
     } else if (s.deviceOnline) {
       dot.className = 'dot ok';
-      text.textContent = `运行时已就绪 · Android ${s.android || '?'}${s.freeform ? ' · 独立窗口已启用' : ''}`;
+      text.textContent = `Çalışma zamanı hazır · Android ${s.android || '?'}${s.freeform ? ' · bağımsız pencere etkin' : ''}`;
       tag.textContent = `Android ${s.android || ''}`.trim();
       tag.className = 'brand-tag ok';
     } else if (s.phase === 'booting' || s.vmStarting) {
       dot.className = 'dot warn';
-      text.textContent = '正在引导 Android…';
-      tag.textContent = '引导中';
+      text.textContent = 'Android başlatılıyor…';
+      tag.textContent = 'Başlatılıyor';
       tag.className = 'brand-tag';
     } else if (s.needsSetup === 'accel') {
       dot.className = 'dot warn';
       // 说清「怎么修」而不是只说「没开」——这句是状态条上最容易被看到的位置
-      text.textContent = '未启用硬件加速：已回退软件模拟（很慢）。点右下角「环境自检 → 修复」开启';
-      tag.textContent = '软件模拟';
+      text.textContent = 'Donanım hızlandırma yok: yazılım emülasyonuna düşüldü (çok yavaş). Sağ alttaki「Ortam denetimi → Onar」ile açın';
+      tag.textContent = 'Yazılım emülasyonu';
       tag.className = 'brand-tag';
     } else if (s.needsSetup === 'sysimg') {
       dot.className = 'dot err';
-      text.textContent = '缺少 Android 14 通用系统镜像 —— 设置 → 运行时里下载（约 1.5GB，只下一次）';
-      tag.textContent = '待下载镜像';
+      text.textContent = 'Android 14 genel sistem imajı eksik —— Ayarlar → Çalışma zamanı bölümünden indirin (yaklaşık 1.5GB, tek seferlik)';
+      tag.textContent = 'İmaj bekleniyor';
       tag.className = 'brand-tag';
     } else if (s.needsSetup === 'emulator') {
       dot.className = 'dot err';
-      text.textContent = '运行时引擎未安装 —— 打开设置 → 运行时一键完成';
-      tag.textContent = '需要部署';
+      text.textContent = 'Çalışma zamanı motoru kurulu değil —— Ayarlar → Çalışma zamanı, tek tıkla tamamla';
+      tag.textContent = 'Kurulum gerekli';
       tag.className = 'brand-tag';
     } else if (s.needsSetup === 'boot') {
       dot.className = 'dot warn';
-      text.textContent = '运行时已就绪 —— 安装 APK 或双击桌面图标会自动开机';
-      tag.textContent = '待开机';
+      text.textContent = 'Çalışma zamanı hazır —— APK kurunca veya masaüstü simgesine çift tıklayınca otomatik açılır';
+      tag.textContent = 'Açılmayı bekliyor';
       tag.className = 'brand-tag';
     } else if (s.installing) {
       dot.className = 'dot warn';
-      text.textContent = '安装程序运行中 —— 请在虚拟机窗口里完成安装';
-      tag.textContent = '安装中';
+      text.textContent = 'Kurulum çalışıyor —— kurulumu sanal makine penceresinde tamamlayın';
+      tag.textContent = 'Kuruluyor';
       tag.className = 'brand-tag';
     } else {
       dot.className = 'dot';
       text.textContent = s.installed
-        ? '运行时待机（安装或打开应用时会自动拉起）'
-        : '运行时尚未安装 Android 系统 —— 打开设置 → 运行时继续';
-      tag.textContent = s.installed ? '待机' : '待安装';
+        ? 'Çalışma zamanı beklemede (uygulama kurunca veya açınca otomatik başlar)'
+        : 'Çalışma zamanında henüz Android sistemi yok —— Ayarlar → Çalışma zamanı ile devam edin';
+      tag.textContent = s.installed ? 'Beklemede' : 'Kurulum bekliyor';
       tag.className = 'brand-tag';
     }
     $('statusDevice').textContent = s.deviceOnline ? (s.serial || '') : '';
@@ -252,17 +252,17 @@ async function refreshStatus() {
       netEl.hidden = !show;
       if (netSep) netSep.hidden = !show;
       if (show) {
-        netEl.textContent = s.network.ok ? `网络正常 ${s.network.ip || ''}`.trim() : '虚拟机未联网';
+        netEl.textContent = s.network.ok ? `Ağ çalışıyor ${s.network.ip || ''}`.trim() : 'Sanal makinede ağ yok';
         netEl.className = 'status-item status-net ' + (s.network.ok ? 'ok' : 'warn');
         netEl.title = s.network.ok
-          ? '安卓虚拟机已联网，联网类应用可以正常加载'
-          : '安卓虚拟机没有网络，联网页面会一直是空白/报错。可在「设置 → 修复网络」处理';
+          ? 'Android sanal makinesi ağa bağlı, ağ gerektiren uygulamalar sorunsuz yüklenir'
+          : 'Android sanal makinesinde ağ yok, ağ sayfaları boş kalır veya hata verir.「Ayarlar → Ağı onar」ile düzeltebilirsiniz';
       }
     }
 
     renderSetup(s);
   } catch (e) {
-    $('statusText').textContent = `状态检查失败：${e.message}`;
+    $('statusText').textContent = `Durum denetimi başarısız: ${e.message}`;
   }
 }
 
@@ -315,15 +315,15 @@ function renderSetup(s) {
   if (stateText) {
     const missing = [];
     if (!adbDone) missing.push('adb');
-    if (!emuDone0) missing.push('引擎');
-    if (!imgDone0) missing.push('系统镜像');
+    if (!emuDone0) missing.push('Motor');
+    if (!imgDone0) missing.push('Sistem imajı');
     stateText.textContent = s.deviceOnline
-      ? `已就绪 · Android ${s.android || ''}`
+      ? `Hazır · Android ${s.android || ''}`
       : s.phase === 'booting' || s.vmStarting
-        ? '正在引导 Android…'
+        ? 'Android başlatılıyor…'
         : allDone0
-          ? '组件齐全 · 待开机（打开应用时自动拉起）'
-          : `缺少 ${missing.join('、')}${accelOk ? '' : '（无硬件加速，将回退软件模拟）'}`;
+          ? 'Bileşenler tam · açılmayı bekliyor (uygulama açınca otomatik başlar)'
+          : `Eksik: ${missing.join(', ')}${accelOk ? '' : ' (donanım hızlandırma yok, yazılım emülasyonuna düşülecek)'}`;
     stateText.title = s.autoProfile || accel.note || hv.note || '';
   }
 
@@ -336,39 +336,39 @@ function renderSetup(s) {
   // 且首次启动会在后台自动跑，用户不需要逐步点击。
   const allDone = !!(env.adb && env.adb.ok) && emuDone && imgDone;
   const left = [];
-  if (!(env.adb && env.adb.ok)) left.push('adb 工具链');
-  if (!emuDone) left.push('Android 运行时');
-  if (!imgDone) left.push('系统镜像');
+  if (!(env.adb && env.adb.ok)) left.push('adb araç seti');
+  if (!emuDone) left.push('Android çalışma zamanı');
+  if (!imgDone) left.push('Sistem imajı');
   const step = {
     key: 'all',
     index: 1,
-    title: allDone ? '一切就绪' : '一键完成',
-    tag: allDone ? '已自动完成' : '自动',
+    title: allDone ? 'Her şey hazır' : 'Tek tıkla tamamla',
+    tag: allDone ? 'Otomatik tamamlandı' : 'Otomatik',
     done: allDone,
     busy: !!busy,
     desc: s.deviceOnline
-      ? `Android ${s.android || ''} 已就绪 · 应用窗口会按屏幕自动适配`
+      ? `Android ${s.android || ''} hazır · uygulama penceresi ekrana otomatik uyum sağlar`
       : booting
-        ? '正在引导 Android…'
+        ? 'Android başlatılıyor…'
         : allDone
-          ? '组件齐全，双击任意 APK 或桌面图标即会自动开机'
-          : `还差 ${left.join('、')}；点下面「一键完成」，会在后台一次装好并自动开机`,
+          ? 'Bileşenler tam; herhangi bir APK\'ya veya masaüstü simgesine çift tıklayınca otomatik açılır'
+          : `Eksik: ${left.join(', ')}; aşağıdaki「Tek tıkla tamamla」ile arka planda hepsi kurulur ve otomatik açılır`,
     actions: s.deviceOnline
-      ? '<button class="btn ghost sm" data-act="vmStop">停止运行时</button>'
+      ? '<button class="btn ghost sm" data-act="vmStop">Çalışma zamanını durdur</button>'
       : '',
   };
 
   $('setupSteps').innerHTML = stepRow(step);
   $('btnDeployAll').disabled = !!busy;
-  $('btnDeployAll').textContent = busy ? '准备中…' : (allDone ? '已完成 · 点此复查' : '一键完成');
+  $('btnDeployAll').textContent = busy ? 'Hazırlanıyor…' : (allDone ? 'Tamamlandı · yeniden denetle' : 'Tek tıkla tamamla');
   // 「上次为什么没起来」优先显示落盘的失败记录：进程重启后内存里的 diagnosis 是空的，
   // 只显示 autoProfile 会让用户完全看不出原因（issue #20/#25 的报告就是这样）。
   const lf = s.lastFailure;
   const lastMsg = (lf && lf.diagnosis && lf.diagnosis.title)
-    ? `上次启动失败：${lf.diagnosis.title}`
-    : (s.diagnosis ? `上次启动自动诊断：${s.diagnosis.title}` : '');
+    ? `Son başlatma başarısız: ${lf.diagnosis.title}`
+    : (s.diagnosis ? `Son başlatma otomatik tanılaması: ${s.diagnosis.title}` : '');
   $('setupNote').textContent = lastMsg
-    || s.autoProfile || '全自动：无需选择镜像、无需启用加速、无需调内存';
+    || s.autoProfile || 'Tam otomatik: imaj seçmek, hızlandırmayı açmak veya belleği ayarlamak gerekmez';
 }
 
 function store_getDiskSize() {
@@ -406,22 +406,22 @@ async function deployAll() {
   if (state.setupBusy) return;
   setStepBusy('all', true);
   try {
-    // 一次调用把 adb / 引擎 / 系统镜像全装完，进度统一显示在唯一那一行
+    // 一次调用把 adb / Motor / 系统镜像全装完，进度统一显示在唯一那一行
     // 用户点「一键部署」属于明确的手动重试，绕过失败冷却
     const r = await api.autoDeploy({ force: true });
     if (!r || !r.ok) {
-      toast({ title: '准备失败', body: (r && r.error) || '请检查网络后重试', type: 'error', sticky: true });
+      toast({ title: 'Hazırlık başarısız', body: (r && r.error) || 'Ağı kontrol edip yeniden deneyin', type: 'error', sticky: true });
       return;
     }
     await refreshStatus();
-    toast({ title: '组件已就绪，正在自动开机…', body: '首次约 1-3 分钟，之后几秒即可。', type: 'info' });
+    toast({ title: 'Bileşenler hazır, otomatik açılıyor…', body: 'İlk seferde 1-3 dakika, sonrasında birkaç saniye.', type: 'info' });
     const started = await api.runtimeStart();
     await refreshStatus();
     toast(started && started.ok
-      ? { title: '运行时已就绪', body: '现在把 APK 拖进窗口，或双击桌面图标即可。', type: 'ok' }
-      : { title: '开机未完成', body: (started && started.error) || '请导出诊断报告查看原因', type: 'error', sticky: true });
+      ? { title: 'Çalışma zamanı hazır', body: 'Artık APK\'yı pencereye sürükleyebilir veya masaüstü simgesine çift tıklayabilirsiniz.', type: 'ok' }
+      : { title: 'Başlatma tamamlanmadı', body: (started && started.error) || 'Nedeni için tanılama raporunu dışa aktarın', type: 'error', sticky: true });
   } catch (e) {
-    toast({ title: '准备失败', body: e.message, type: 'error', sticky: true });
+    toast({ title: 'Hazırlık başarısız', body: e.message, type: 'error', sticky: true });
   } finally {
     setStepBusy('all', false);
     await refreshStatus();
@@ -430,7 +430,7 @@ async function deployAll() {
 }
 
 async function runStep(key) {
-  if (state.setupBusy) return { ok: false, error: '已有部署任务进行中' };
+  if (state.setupBusy) return { ok: false, error: 'Devam eden bir kurulum görevi var' };
   setStepBusy(key, true);
   let r;
   try {
@@ -439,18 +439,18 @@ async function runStep(key) {
     else if (key === 'sysimg') r = await api.installSysimg();
     else if (key === 'accel') {
       const t = toast({
-        title: '正在安装硬件加速驱动…',
-        body: '请在弹出的是否允许窗口点「是」',
+        title: 'Donanım hızlandırma sürücüsü kuruluyor…',
+        body: 'Açılan izin penceresinde「Evet」e basın',
         sticky: true,
         spinner: true,
       });
       r = await api.enableAccel();
-      if (r.ok) t.update({ title: '硬件加速已启用', type: 'ok' });
-      else t.update({ title: '加速未启用', body: r.error, type: 'error', sticky: true });
+      if (r.ok) t.update({ title: 'Donanım hızlandırma etkin', type: 'ok' });
+      else t.update({ title: 'Hızlandırma etkin değil', body: r.error, type: 'error', sticky: true });
     } else if (key === 'qemu') r = await api.installQemu();
     else if (key === 'iso') r = await api.downloadIso();
     else if (key === 'disk') r = await api.createDisk(store_getDiskSize());
-    else r = { ok: false, error: '未知步骤' };
+    else r = { ok: false, error: 'Bilinmeyen adım' };
   } catch (e) {
     r = { ok: false, error: e.message };
   }
@@ -462,12 +462,12 @@ async function runStep(key) {
 async function startInstall() {
   const r = await api.startInstaller();
   if (!r.ok) {
-    toast({ title: '无法启动安装环境', body: r.error, type: 'error', sticky: true });
+    toast({ title: 'Kurulum ortamı başlatılamadı', body: r.error, type: 'error', sticky: true });
     return;
   }
   $('setupGuide').hidden = false;
   $('setupGuide').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  toast({ title: '虚拟机窗口已打开', body: '按下方 6 步完成安装；装好后点「我已安装完成」。', type: 'ok', sticky: true });
+  toast({ title: 'Sanal makine penceresi açıldı', body: 'Kurulumu aşağıdaki 6 adımla tamamlayın; bitince「Kurulumu tamamladım」a basın.', type: 'ok', sticky: true });
 }
 
 async function markInstalled() {
@@ -475,7 +475,7 @@ async function markInstalled() {
   await api.runtimeStop();
   $('setupGuide').hidden = true;
   await refreshStatus();
-  toast({ title: '安装完成，运行时已接管', body: '现在可以直接把 APK 拖进来安装了。', type: 'ok' });
+  toast({ title: 'Kurulum tamamlandı, çalışma zamanı devraldı', body: 'Artık APK\'yı sürükleyip kurabilirsiniz.', type: 'ok' });
 }
 
 
@@ -484,18 +484,18 @@ async function markInstalled() {
 
 /** 把安装失败翻译成「下一步该做什么」，只对最常见的几种做提示，其它原样显示 */
 function friendlyInstallErrorText(msg) {
-  const s = String(msg || '未知错误');
+  const s = String(msg || 'Bilinmeyen hata');
   if (/INSUFFICIENT_STORAGE|not enough space|空间不足|ENOSPC/i.test(s)) {
-    return `${s}\n安卓数据分区不够用：设置 → 性能与资源占用 → 安卓数据分区调大后点「立即扩容」。`;
+    return `${s}\nAndroid veri bölümü yetersiz: Ayarlar → Performans ve kaynak kullanımı → Android veri bölümü'nü büyütüp「Hemen büyüt」e basın.`;
   }
-  if (/NO_MATCHING_ABIS/i.test(s)) return `${s}\n这个包只有 ARM 库，正在自动切换兼容镜像后重试。`;
+  if (/NO_MATCHING_ABIS/i.test(s)) return `${s}\nBu paket yalnızca ARM kitaplıkları içeriyor; uyumluluk imajına geçilip yeniden denenecek.`;
   if (/INSTALL_FAILED_ALREADY_EXISTS|signatures do not match/i.test(s)) {
-    return `${s}\n同包名但签名不同（常见于从别的渠道装过）。在应用卡片右键「卸载」后再装。`;
+    return `${s}\nAynı paket adı ancak farklı imza (başka bir kaynaktan kurulmuş olabilir). Uygulama kartına sağ tıklayıp「Kaldır」dedikten sonra yeniden kurun.`;
   }
-  if (/INSTALL_FAILED_VERSION_DOWNGRADE/i.test(s)) return `${s}\n已装版本更高，先在右键菜单里卸载再装。`;
+  if (/INSTALL_FAILED_VERSION_DOWNGRADE/i.test(s)) return `${s}\nKurulu sürüm daha yüksek; önce sağ tık menüsünden kaldırıp yeniden kurun.`;
   if (/ERR_FS_FILE_TOO_LARGE|greater than possible Buffer|Cannot allocate|ENOMEM|out of memory/i.test(s)) {
-    return `${s}\n这个安装包过大或内存不足，解析被系统拒绝了。请确认磁盘与内存充足后重试；`
-      + '仍失败请把安装包路径换成纯英文短路径（如 D:\\a.apk）。';
+    return `${s}\nPaket çok büyük veya bellek yetersiz, sistem ayrıştırmayı reddetti. Disk ve belleğin yeterli olduğundan emin olup yeniden deneyin;`
+      + 'Yine başarısız olursa APK yolunu kısa ve tamamen İngilizce bir yola taşıyın (örn. D:\\a.apk).';
   }
   return s;
 }
@@ -508,7 +508,7 @@ let installToast = null;
 async function installFiles(paths) {
   if (!paths || !paths.length) return;
   if (state.installing) {
-    toast({ title: '已有安装任务在进行', body: '请等当前应用装完再继续。' });
+    toast({ title: 'Devam eden bir kurulum var', body: 'Geçerli uygulamanın kurulumu bitince devam edin.' });
     return;
   }
   state.installing = true;
@@ -517,21 +517,21 @@ async function installFiles(paths) {
 
   for (const p of paths) {
     const name = p.split(/[\\/]/).pop();
-    const t = toast({ title: `正在安装 ${name}`, body: '解析 APK…', progress: 8, sticky: true, spinner: true });
+    const t = toast({ title: `Kuruluyor: ${name}`, body: 'APK ayrıştırılıyor…', progress: 8, sticky: true, spinner: true });
     installToast = t;
     let off = () => {};
     try {
       off = api.on('install:progress', (pr) => {
         const base = { parse: 12, 'parse-done': 24, runtime: 38, install: 62, shortcut: 88, done: 100 }[pr.stage] || 50;
         const pct = pr.percent != null ? Math.min(60, Math.round((pr.percent / 100) * 60)) : base;
-        t.update({ title: pr.meta ? `正在安装 ${pr.meta.label}` : `正在安装 ${name}`, body: pr.message, progress: pct });
+        t.update({ title: pr.meta ? `Kuruluyor: ${pr.meta.label}` : `Kuruluyor: ${name}`, body: pr.message, progress: pct });
       });
       const r = await api.installApk(p);
-      t.update({ title: `${r.app.label} 已安装`, body: r.app.shortcutPath ? '桌面快捷方式已创建，双击即可直接打开。' : '可在应用卡片右键创建桌面快捷方式。', progress: 100, type: 'ok' });
+      t.update({ title: `${r.app.label} kuruldu`, body: r.app.shortcutPath ? 'Masaüstü kısayolu oluşturuldu, çift tıklayınca doğrudan açılır.' : 'Uygulama kartına sağ tıklayarak masaüstü kısayolu oluşturabilirsiniz.', progress: 100, type: 'ok' });
       t.el.querySelector('.spinner')?.remove();
       setTimeout(t.dismiss, 3600);
       if (r.warnings && r.warnings.length) {
-        toast({ title: `${r.app.label} 兼容性提示`, body: r.warnings.join(' '), type: 'error', sticky: false });
+        toast({ title: `${r.app.label} uyumluluk uyarısı`, body: r.warnings.join(' '), type: 'error', sticky: false });
       }
       ok++;
     } catch (e) {
@@ -559,20 +559,20 @@ async function launchApp(pkg) {
   const app = state.apps.find((a) => a.package === pkg);
   state.launchPkg = pkg;
   const t = toast({
-    title: `正在打开 ${app ? app.label : pkg}`,
-    body: '首次启动需要预热运行时，请稍候…',
+    title: `Açılıyor: ${app ? app.label : pkg}`,
+    body: 'İlk başlatmada çalışma zamanı hazırlanır, bir dakika…',
     sticky: true,
     spinner: true,
   });
   const r = await api.launch(pkg);
   if (r.ok) {
     // 应用有自己的窗口，主界面自动收起；这里只留一句提示，然后隐藏窗口
-    t.update({ title: '已启动', body: '应用正在独立窗口中运行（顶部可旋转屏幕）。', type: 'ok' });
+    t.update({ title: 'Başlatıldı', body: 'Uygulama kendi penceresinde çalışıyor (üstten ekran döndürülebilir).', type: 'ok' });
     setTimeout(t.dismiss, 1600);
     setTimeout(() => api.winHide(), 900);
     setTimeout(refreshApps, 1200);
   } else {
-    t.update({ title: '启动失败', body: r.error, type: 'error' });
+    t.update({ title: 'Başlatma başarısız', body: r.error, type: 'error' });
     setTimeout(t.dismiss, 6000);
   }
 }
@@ -580,43 +580,43 @@ async function launchApp(pkg) {
 async function createShortcut(pkg) {
   try {
     const r = await api.createShortcut(pkg);
-    toast({ title: '桌面快捷方式已创建', body: r.path, type: 'ok' });
+    toast({ title: 'Masaüstü kısayolu oluşturuldu', body: r.path, type: 'ok' });
     refreshApps();
   } catch (e) {
-    toast({ title: '创建快捷方式失败', body: e.message, type: 'error' });
+    toast({ title: 'Kısayol oluşturulamadı', body: e.message, type: 'error' });
   }
 }
 
 async function uninstall(pkg) {
   const app = state.apps.find((a) => a.package === pkg);
   if (!app) return;
-  const ok = window.confirm(`确定卸载「${app.label}」？\n\n应用数据会一并被清除，桌面快捷方式也会被删除。`);
+  const ok = window.confirm(`「${app.label}」kaldırılsın mı?\n\nUygulama verisi de silinecek, masaüstü kısayolu kaldırılacak.`);
   if (!ok) return;
   try {
     await api.uninstall(pkg);
-    toast({ title: '已卸载', body: app.label, type: 'ok' });
+    toast({ title: 'Kaldırıldı', body: app.label, type: 'ok' });
     refreshApps();
   } catch (e) {
-    toast({ title: '卸载失败', body: e.message, type: 'error' });
+    toast({ title: 'Kaldırma başarısız', body: e.message, type: 'error' });
   }
 }
 
 /* ---------------- 右键菜单 ---------------- */
 
 const MENU_ITEMS = [
-  { key: 'open', label: '打开应用', kbd: 'Enter' },
+  { key: 'open', label: 'Uygulamayı aç', kbd: 'Enter' },
   // 只在应用真的在运行时才出现（见 showMenu 里的过滤）。
   // 以前完全没有这一项，独立窗口模式下又没有可点的关闭按钮，
   // 应用一起来就关不掉，只能退到托盘退出整个 ApkStart。
-  { key: 'stop', label: '关闭应用', onlyRunning: true },
-  { key: 'shortcut', label: '创建桌面快捷方式' },
-  { key: 'pin', label: '固定到顶部' },
-  { key: 'keymap', label: '按键映射…' },
+  { key: 'stop', label: 'Uygulamayı kapat', onlyRunning: true },
+  { key: 'shortcut', label: 'Masaüstü kısayolu oluştur' },
+  { key: 'pin', label: 'Üste sabitle' },
+  { key: 'keymap', label: 'Tuş eşlemesi…' },
   { divider: true },
-  { key: 'reveal', label: '打开 APK 所在位置' },
-  { key: 'clear', label: '清除应用数据' },
+  { key: 'reveal', label: 'APK konumunu aç' },
+  { key: 'clear', label: 'Uygulama verisini temizle' },
   { divider: true },
-  { key: 'uninstall', label: '卸载', danger: true },
+  { key: 'uninstall', label: 'Kaldır', danger: true },
 ];
 
 function showMenu(x, y, pkg) {
@@ -626,7 +626,7 @@ function showMenu(x, y, pkg) {
   const items = MENU_ITEMS.filter((it) => !it.onlyRunning || (app && app.running));
   menu.innerHTML = items.map((it) => {
     if (it.divider) return '<div class="divider"></div>';
-    const label = it.key === 'pin' ? (app && app.pinned ? '取消固定' : '固定到顶部') : it.label;
+    const label = it.key === 'pin' ? (app && app.pinned ? 'Sabitlemeyi kaldır' : 'Üste sabitle') : it.label;
     return `<div class="item ${it.danger ? 'danger' : ''}" data-key="${it.key}" data-act="${it.key}">
       <span>${esc(label)}</span>${it.kbd ? `<span class="k">${it.kbd}</span>` : ''}
     </div>`;
@@ -654,12 +654,12 @@ async function handleMenu(act) {
       try {
         const r = await api.stop(pkg);
         if (r && r.ok) {
-          toast({ title: '已关闭', body: app.label, type: 'ok' });
+          toast({ title: 'Kapatıldı', body: app.label, type: 'ok' });
         } else {
-          toast({ title: '关闭失败', body: (r && r.error) || '未知错误', type: 'error' });
+          toast({ title: 'Kapatma başarısız', body: (r && r.error) || 'Bilinmeyen hata', type: 'error' });
         }
       } catch (e) {
-        toast({ title: '关闭失败', body: e.message, type: 'error' });
+        toast({ title: 'Kapatma başarısız', body: e.message, type: 'error' });
       }
       return refreshApps();
     }
@@ -668,12 +668,12 @@ async function handleMenu(act) {
     case 'keymap': return showKeymapPicker(pkg, app.label);
     case 'reveal': return api.revealApk(pkg);
     case 'clear': {
-      if (!window.confirm(`清除「${app.label}」的全部数据？此操作不可撤销。`)) return;
+      if (!window.confirm(`「${app.label}」uygulamasının tüm verileri silinsin mi? Bu işlem geri alınamaz.`)) return;
       try {
         await api.clearData(pkg);
-        toast({ title: '数据已清除', body: app.label, type: 'ok' });
+        toast({ title: 'Veriler temizlendi', body: app.label, type: 'ok' });
       } catch (e) {
-        toast({ title: '清除失败', body: e.message, type: 'error' });
+        toast({ title: 'Temizleme başarısız', body: e.message, type: 'error' });
       }
       return;
     }
@@ -692,26 +692,26 @@ async function showKeymapPicker(pkg, label) {
     const current = await api.keymap.getMap(pkg);
     const hasCurrent = current && current.length > 0;
     const lines = presets.map((p, i) => `${i + 1}. ${p.label} — ${p.desc}`);
-    if (hasCurrent) lines.unshift('0. 清除当前映射');
-    const msg = `为「${label}」选择按键映射预设：\n\n${lines.join('\n')}\n\n输入编号：`;
+    if (hasCurrent) lines.unshift('0. Mevcut eşlemeyi temizle');
+    const msg = `「${label}」için tuş eşleme şablonu seçin:\n\n${lines.join('\n')}\n\nNumarayı girin:`;
     const input = window.prompt(msg, hasCurrent ? '0' : '1');
     if (input === null) return; // 取消
     const idx = parseInt(input, 10);
     if (hasCurrent && idx === 0) {
       await api.keymap.setMap(pkg, []);
-      toast({ title: '已清除按键映射', body: label, type: 'ok' });
+      toast({ title: 'Tuş eşlemesi temizlendi', body: label, type: 'ok' });
       return;
     }
     const presetIdx = hasCurrent ? idx - 1 : idx;
     if (presetIdx < 1 || presetIdx > presets.length) {
-      toast({ title: '无效编号', type: 'error' });
+      toast({ title: 'Geçersiz numara', type: 'error' });
       return;
     }
     const chosen = presets[presetIdx - 1];
     await api.keymap.applyPreset(pkg, chosen.id);
-    toast({ title: `已套用「${chosen.label}」`, body: `${label} · 打开应用后键盘即可操控`, type: 'ok' });
+    toast({ title: `「${chosen.label}」uygulandı`, body: `${label} · uygulamayı açtıktan sonra klavyeyle kontrol edin`, type: 'ok' });
   } catch (e) {
-    toast({ title: '按键映射设置失败', body: e.message, type: 'error' });
+    toast({ title: 'Tuş eşlemesi ayarlanamadı', body: e.message, type: 'error' });
   }
 }
 
@@ -724,14 +724,14 @@ let volumeTimer = null;
 async function refreshAndroid() {
   const el = $('androidStatus');
   if (!el) return;
-  el.textContent = '读取中…';
+  el.textContent = 'Okunuyor…';
   const r = await api.android.status().catch(() => null);
   if (!r || !r.ok) {
-    el.textContent = r && r.error ? `运行时未就绪（${String(r.error).slice(0, 36)}）` : '运行时未启动';
+    el.textContent = r && r.error ? `Çalışma zamanı hazır değil (${String(r.error).slice(0, 36)})` : 'Çalışma zamanı başlatılmadı';
     return;
   }
-  el.textContent = `Android ${r.sdk || '?'} · ${r.wifi ? 'Wi-Fi 已开' : 'Wi-Fi 已关'}` +
-    `${r.airplane ? ' · 飞行模式' : ''} · 音量 ${r.volume}%`;
+  el.textContent = `Android ${r.sdk || '?'} · ${r.wifi ? 'Wi-Fi açık' : 'Wi-Fi kapalı'}` +
+    `${r.airplane ? ' · Uçak modu' : ''} · Ses ${r.volume}%`;
   $('setAndroidWifi').checked = !!r.wifi;
   $('setAndroidAirplane').checked = !!r.airplane;
   $('setAndroidAnim').checked = !r.animationsOff;
@@ -749,30 +749,30 @@ function bindAndroid() {
     const r = await api.android.set(key, value).catch(() => null);
     toast({
       type: r && r.ok ? 'ok' : 'error',
-      title: r && r.ok ? (msg || '已生效') : `失败：${(r && r.error) || '运行时未就绪'}`,
+      title: r && r.ok ? (msg || 'Etkin') : `Başarısız: ${(r && r.error) || 'çalışma zamanı hazır değil'}`,
     });
     if (r && r.ok) refreshAndroid();
   };
-  $('setAndroidWifi').addEventListener('change', (e) => set('wifi', e.target.checked, e.target.checked ? 'Wi-Fi 已开启' : 'Wi-Fi 已关闭'));
-  $('setAndroidAirplane').addEventListener('change', (e) => set('airplane', e.target.checked, e.target.checked ? '已进入飞行模式' : '已退出飞行模式'));
-  $('setAndroidAnim').addEventListener('change', (e) => set('animations', e.target.checked, e.target.checked ? '系统动画已开启' : '系统动画已关闭，界面更快'));
-  $('setAndroidFont').addEventListener('change', (e) => set('fontScale', Number(e.target.value), '字体大小已调整'));
-  $('setAndroidDensity').addEventListener('change', (e) => set('density', Number(e.target.value), '显示大小已调整'));
+  $('setAndroidWifi').addEventListener('change', (e) => set('wifi', e.target.checked, e.target.checked ? 'Wi-Fi açıldı' : 'Wi-Fi kapatıldı'));
+  $('setAndroidAirplane').addEventListener('change', (e) => set('airplane', e.target.checked, e.target.checked ? 'Uçak moduna geçildi' : 'Uçak modundan çıkıldı'));
+  $('setAndroidAnim').addEventListener('change', (e) => set('animations', e.target.checked, e.target.checked ? 'Sistem animasyonları açıldı' : 'Sistem animasyonları kapatıldı, arayüz hızlandı'));
+  $('setAndroidFont').addEventListener('change', (e) => set('fontScale', Number(e.target.value), 'Yazı tipi boyutu ayarlandı'));
+  $('setAndroidDensity').addEventListener('change', (e) => set('density', Number(e.target.value), 'Görüntü boyutu ayarlandı'));
   $('setAndroidVolume').addEventListener('input', (e) => {
     $('androidVolumeText').textContent = `${e.target.value}%`;
     clearTimeout(volumeTimer);
-    volumeTimer = setTimeout(() => set('volume', Number(e.target.value), '音量已调整'), 260);
+    volumeTimer = setTimeout(() => set('volume', Number(e.target.value), 'Ses düzeyi ayarlandı'), 260);
   });
   $('btnAndroidRefresh').addEventListener('click', () => refreshAndroid());
   $('btnAndroidTune').addEventListener('click', async () => {
     const r = await api.android.tune(state.launchPkg || '').catch(() => null);
-    toast({ type: r && r.ok ? 'ok' : 'error', title: r && r.ok ? '已优化：动画关闭、后台放宽、电池白名单' : '优化失败，运行时可能未启动' });
+    toast({ type: r && r.ok ? 'ok' : 'error', title: r && r.ok ? 'Optimize edildi: animasyonlar kapalı, arka plan serbest, pil beyaz listesinde' : 'Optimizasyon başarısız, çalışma zamanı başlamamış olabilir' });
     if (r && r.ok) refreshAndroid();
   });
   const open = async (action) => {
     const r = await api.android.open(action).catch(() => null);
     if (!r || !r.ok) {
-      toast({ type: 'error', title: '需要先打开一次应用，让运行时启动' });
+      toast({ type: 'error', title: 'Önce bir uygulamayı bir kez açıp çalışma zamanını başlatın' });
     }
   };
   $('btnAndroidSettings').addEventListener('click', () => open('settings'));
@@ -793,18 +793,18 @@ function syncBackendFields() {
 async function refreshResources() {
   const bNote = $('builtinResNote');
   if (!bNote) return;
-  const gb = (mb) => (Number(mb) > 0 ? `${Math.round(Number(mb) / 1024)} GB` : '未知');
+  const gb = (mb) => (Number(mb) > 0 ? `${Math.round(Number(mb) / 1024)} GB` : 'bilinmiyor');
   const r = await api.resources().catch(() => null);
   if (!r || r.ok === false) {
-    bNote.textContent = (r && (r.note || r.error)) || '暂时读不到资源分配信息';
+    bNote.textContent = (r && (r.note || r.error)) || 'Kaynak dağılımı bilgisi şu an okunamıyor';
     return;
   }
   const host = r.host || {};
   const lim = r.limits || {};
   const free = Number(r.freeMB) || Number((r.current && r.current.freeMB) || 0);
-  bNote.textContent = `本机 ${gb(host.totalMB)} 内存 / ${host.cores} 核；`
-    + `内存最多可分 ${gb(lim.maxMB)}，核心最多 ${Math.max(1, (host.cores || 1) - 1)} 个（各留 1/4 内存与 1 核给 Windows）。`
-    + `数据分区上限 ${lim.maxGB || 0} GB${free ? `（所在磁盘剩余 ${(free / 1024).toFixed(1)} GB）` : ''}。`
+  bNote.textContent = `Bu makine ${gb(host.totalMB)} bellek / ${host.cores} çekirdek;`
+    + `En çok ${gb(lim.maxMB)} bellek ve ${Math.max(1, (host.cores || 1) - 1)} çekirdek verilebilir (belleğin 1/4'ü ve 1 çekirdek Windows'a ayrılır).`
+    + `Veri bölümü üst sınırı ${lim.maxGB || 0} GB${free ? ` (bulunduğu diskte ${(free / 1024).toFixed(1)} GB boş)` : ''}。`
     + (r.verdict && r.verdict.note ? ` ${r.verdict.note}` : '');
 }
 
@@ -816,7 +816,7 @@ function renderPreflight(res) {
   if (!list) return;
   list.textContent = '';
   if (!res || !res.report) {
-    if (sum) sum.textContent = (res && res.error) || '体检没有返回结果，请重试';
+    if (sum) sum.textContent = (res && res.error) || 'Denetim sonuç döndürmedi, yeniden deneyin';
     return;
   }
   const { report, edition } = res;
@@ -847,24 +847,24 @@ function renderPreflight(res) {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         const old = btn.textContent;
-        btn.textContent = '正在处理…';
+        btn.textContent = 'İşleniyor…';
         let r = null;
         if (it.action.id === 'accel') r = await api.enableAccel().catch(() => null);
         else r = await api.enableVirtualization().catch(() => null);
         btn.disabled = false;
         btn.textContent = old;
-        if (!r) { toast({ type: 'error', title: '操作没有完成', body: '可以稍后重试，或手动按提示操作' }); return; }
-        if (r.cancelled) toast({ type: 'warn', title: '已取消', body: '没有修改系统设置' });
+        if (!r) { toast({ type: 'error', title: 'İşlem tamamlanmadı', body: 'Daha sonra yeniden deneyebilir veya istemleri izleyerek elle yapabilirsiniz' }); return; }
+        if (r.cancelled) toast({ type: 'warn', title: 'İptal edildi', body: 'Sistem ayarları değiştirilmedi' });
         else if (r.ok || r.already) {
           const reboot = r.restartNeeded === true;
           toast({
             type: 'ok',
-            title: r.already ? '硬件加速已经可用' : (reboot ? '已提交，需要重启' : '已生效'),
-            body: r.already ? '' : (reboot ? '重启电脑后硬件加速才会生效，回来点「开始体检」确认' : '可以点「开始体检」确认结果'),
+            title: r.already ? 'Donanım hızlandırma zaten kullanılabilir' : (reboot ? 'Gönderildi, yeniden başlatma gerekir' : 'Etkin'),
+            body: r.already ? '' : (reboot ? 'Donanım hızlandırma bilgisayar yeniden başlayınca etkinleşir; dönünce "Denetime başla"ya basıp doğrulayın' : '"Denetime başla"ya basıp sonucu doğrulayabilirsiniz'),
           });
           if (r.already || !reboot) setTimeout(() => runPreflight().catch(() => {}), 1200);
         } else {
-          toast({ type: 'error', title: '没能自动完成', body: (r.error || r.note || '请按提示手动操作') });
+          toast({ type: 'error', title: 'Otomatik tamamlanamadı', body: (r.error || r.note || 'Lütfen istemleri izleyerek elle yapın') });
         }
       });
       wrap.append(btn);
@@ -879,9 +879,9 @@ function renderPreflight(res) {
   }
   const rec = report.recommended || {};
   if (sum) {
-    sum.textContent = `${report.summary}。推荐配置：${Math.round((rec.memoryMB || 0) / 1024)} GB 内存 / `
-      + `${rec.cores || 2} 核 / ${rec.renderSize || 'auto'} · 渲染 ${rec.gpuMode || 'auto'}`
-      + (edition === 'store' ? '（商店版：系统功能只能在「Windows 功能」里手动开）' : '');
+    sum.textContent = `${report.summary}. Önerilen yapılandırma: ${Math.round((rec.memoryMB || 0) / 1024)} GB bellek / `
+      + `${rec.cores || 2} çekirdek / ${rec.renderSize || 'auto'} · işleme ${rec.gpuMode || 'auto'}`
+      + (edition === 'store' ? ' (Mağaza sürümü: sistem özellikleri yalnızca "Windows özellikleri"nde elle açılabilir)' : '');
   }
   if (applyBtn) applyBtn.hidden = false;
 }
@@ -892,13 +892,13 @@ async function runPreflight() {
   if (!btn) return null;
   const old = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '体检中…';
-  if (sum) sum.textContent = '正在检查虚拟化、显卡、内存…（第一次约 2~3 秒）';
+  btn.textContent = 'Denetleniyor…';
+  if (sum) sum.textContent = 'Sanallaştırma, ekran kartı ve bellek denetleniyor… (ilk seferde ~2-3 sn)';
   let r = null;
   try {
     r = await api.preflightRun();
   } catch (e) {
-    r = { error: e.message || '体检失败' };
+    r = { error: e.message || 'Denetim başarısız' };
   }
   btn.disabled = false;
   btn.textContent = old;
@@ -916,10 +916,10 @@ function renderDrivers(r) {
   const errors = (r && r.errors) || [];
   const onCount = drivers.filter((d) => d.enabled && d.matched).length;
   if (sum) {
-    const accel = host.accel === 'none' ? '无硬件加速' : (host.accel || '未知');
-    sum.textContent = `本机：${host.platform || ''}/${host.arch || ''} · ${host.gpuVendor || '未知'} 显卡 · ${accel}`
-      + ` · emulator ${host.emulatorVersion || '未知'}；驱动 ${drivers.length} 个，本机已生效 ${onCount} 个。`
-      + (errors.length ? ` ${errors.length} 个文件加载失败（见下）。` : '');
+    const accel = host.accel === 'none' ? 'Donanım hızlandırma yok' : (host.accel || 'bilinmiyor');
+    sum.textContent = `Bu makine: ${host.platform || ''}/${host.arch || ''} · ${host.gpuVendor || 'bilinmiyor'} ekran kartı · ${accel}`
+      + ` · emulator ${host.emulatorVersion || 'bilinmiyor'}; ${drivers.length} sürücü, bu makinede ${onCount} tanesi etkin.`
+      + (errors.length ? ` ${errors.length} dosya yüklenemedi (aşağıda).` : '');
   }
   list.textContent = '';
   for (const d of drivers) {
@@ -934,7 +934,7 @@ function renderDrivers(r) {
     cb.addEventListener('change', async () => {
       const res = await api.driversSetEnabled(d.id, cb.checked).catch(() => null);
       if (res && res.ok && res.overview) renderDrivers(res.overview);
-      else { cb.checked = !cb.checked; toast({ type: 'error', title: '保存失败', body: (res && res.error) || '请稍后再试' }); }
+      else { cb.checked = !cb.checked; toast({ type: 'error', title: 'Kaydetme başarısız', body: (res && res.error) || 'Lütfen sonra yeniden deneyin' }); }
     });
     const name = document.createElement('span');
     name.className = 'drv-name';
@@ -944,13 +944,13 @@ function renderDrivers(r) {
     if (d.matched && d.enabled) {
       const b = document.createElement('span');
       b.className = 'drv-badge hit';
-      b.textContent = '已生效';
+      b.textContent = 'Etkin';
       head.append(b);
     }
     if (d.builtin) {
       const b = document.createElement('span');
       b.className = 'drv-badge';
-      b.textContent = '内置示例';
+      b.textContent = 'Yerleşik örnek';
       head.append(b);
     }
     item.append(head);
@@ -960,7 +960,7 @@ function renderDrivers(r) {
     meta.textContent = `v${d.version || '?'}`
       + (d.author ? ` · ${d.author}` : '')
       + ` · priority ${d.priority}`
-      + (d.hits && d.hits.length ? ` · 命中：${d.hits.join(' / ')}` : ' · 本机不匹配');
+      + (d.hits && d.hits.length ? ` · eşleşti: ${d.hits.join(' / ')}` : ' · bu makineyle eşleşmiyor');
     item.append(meta);
 
     if (d.description) {
@@ -980,7 +980,7 @@ function renderDrivers(r) {
   if (!drivers.length && !errors.length) {
     const empty = document.createElement('div');
     empty.className = 'drv-meta';
-    empty.textContent = '还没有任何驱动。可以点「导出本机模板」做一个，或导入别人做好的 JSON。';
+    empty.textContent = 'Henüz sürücü yok.「Bu makine şablonunu dışa aktar」ile bir tane oluşturabilir veya hazır bir JSON içe aktarabilirsiniz.';
     list.append(empty);
   }
 }
@@ -989,7 +989,7 @@ async function refreshDrivers() {
   if (!$('drvList')) return;
   const r = await api.driversList().catch(() => null);
   if (!r) {
-    if ($('drvSummary')) $('drvSummary').textContent = '读不到驱动列表（运行时可能还没部署）';
+    if ($('drvSummary')) $('drvSummary').textContent = 'Sürücü listesi okunamadı (çalışma zamanı henüz kurulmamış olabilir)';
     return;
   }
   renderDrivers(r);
@@ -1050,19 +1050,19 @@ async function refreshDataInfo() {
   const el = $('dataNote');
   if (!el) return;
   const info = await api.dataInfo().catch(() => null);
-  if (!info) { el.textContent = '读取数据分区信息失败'; return; }
+  if (!info) { el.textContent = 'Veri bölümü bilgisi okunamadı'; return; }
   const auto = Number(($('setDataGB') || {}).value || 0) === 0;
   // 有 quickboot 差量盘时底座镜像的大小不等于 guest 看到的容量（实测 8GB 镜像、guest 5.7GB），
   // 与其显示一个会误导人的数字，不如明确说「以运行时为准」。
   const img = info.overlay
-    ? '快速启动差量盘（实际容量以运行时 /data 为准）'
-    : (info.fsGB ? `实际文件系统 ${info.fsGB} GB` : (info.imageGB ? `${info.imageGB} GB` : '尚未创建'));
-  const free = info.freeDiskMB ? `${(info.freeDiskMB / 1024).toFixed(1)} GB` : '未知';
+    ? 'Hızlı başlatma fark diski (gerçek kapasite çalışma zamanındaki /data ile belirlenir)'
+    : (info.fsGB ? `Gerçek dosya sistemi ${info.fsGB} GB` : (info.imageGB ? `${info.imageGB} GB` : 'Henüz oluşturulmadı'));
+  const free = info.freeDiskMB ? `${(info.freeDiskMB / 1024).toFixed(1)} GB` : 'bilinmiyor';
   const pending = Number(info.pendingGB) > 0
-    ? ` 目标 ${info.configuredGB} GB 还没生效：安卓正在用快速启动差量盘，需要「重置安卓数据」后按新容量重建（会清空已装应用）。`
+    ? ` Hedef ${info.configuredGB} GB henüz geçerli değil: Android hızlı başlatma fark diskini kullanıyor; 「Android verilerini sıfırla」ile yeni kapasiteye göre yeniden oluşturmak gerekir (yüklü uygulamalar silinir).`
     : '';
-  el.textContent = `当前数据分区：${img}${auto ? '（自动）' : ''} · 所在磁盘剩余 ${free}。${pending}`
-    + '游戏提示「存储空间不足」就把这里调大后点「立即扩容」；能就地扩容时不丢已装应用。';
+  el.textContent = `Geçerli veri bölümü: ${img}${auto ? ' (otomatik)' : ''} · bulunduğu diskte kalan ${free}. ${pending}`
+    + 'Oyun「depolama alanı yetersiz」derse burayı büyütüp「Hemen büyüt」e basın; yerinde büyütmede yüklü uygulamalar korunur.';
 }
 
 async function openSettings() {
@@ -1080,17 +1080,17 @@ async function openSettings() {
   if (curVerEl && info.version) curVerEl.textContent = `v${info.version}`;
   const assoc = await api.assocStatus();
   const btn = $('btnAssoc');
-  btn.textContent = assoc.registered ? '已关联 · 点击取消' : '未关联 · 点击开启';
+  btn.textContent = assoc.registered ? 'İlişkilendirildi · iptal için tıklayın' : 'İlişkilendirilmedi · açmak için tıklayın';
   btn.dataset.on = assoc.registered ? '1' : '0';
 
   api.doctorProfile().then((r) => {
     if (r && r.text) $('autoProfileText').textContent = r.text;
-  }).catch(() => { $('autoProfileText').textContent = '自动模式'; });
+  }).catch(() => { $('autoProfileText').textContent = 'Otomatik mod'; });
   api.runtimeUsage().then((u) => {
     $('usageText').textContent = u
-      ? `共 ${u.totalText}${u.reclaimable ? ` · 可回收 ${u.reclaimableText}（${u.count} 项）` : ' · 已是精简状态'}`
-      : '统计不可用';
-  }).catch(() => { $('usageText').textContent = '统计不可用'; });
+      ? `Toplam ${u.totalText}${u.reclaimable ? ` · geri kazanılabilir ${u.reclaimableText} (${u.count} öğe)` : ' · zaten sadeleştirilmiş'}`
+      : 'İstatistik kullanılamıyor';
+  }).catch(() => { $('usageText').textContent = 'İstatistik kullanılamıyor'; });
 
   $('settingsMask').classList.add('on');
   refreshAndroid();
@@ -1117,11 +1117,11 @@ function renderUpdate(info) {
   if (info.current) cur.textContent = `v${info.current}`;
 
   if (info.ok === false) {
-    st.textContent = `检查失败：${info.error || '网络不可用'}`;
+    st.textContent = `Denetim başarısız: ${info.error || 'ağ kullanılamıyor'}`;
     // 检查失败也要给一条出路：直接把发布页打开，用户至少能手动下载。
     // 以前这里是「什么都不显示」，用户只会觉得「更新功能坏了」。
     showUpdateBtn(true);
-    btn.textContent = '打开下载页';
+    btn.textContent = 'İndirme sayfasını aç';
     btn.dataset.mode = 'manual';
     lastUpdate = { htmlUrl: info.htmlUrl || '' };
     if (bar) bar.hidden = true;
@@ -1132,21 +1132,21 @@ function renderUpdate(info) {
     // 用户排查「为什么检查更新很慢」时，这一行比任何日志都直接。
     const src = (info.sources || []).map((x) => `${x.name} ${x.tag || ''}`.trim()).join(' / ');
     const bad = (info.unreachable || []).map((x) => x.name).join('、');
-    const stale = info.stale ? '（离线缓存，可能不是最新）' : '';
-    st.textContent = `发现新版本 ${info.tag}${src ? `（${src}）` : ''}${bad ? `；${bad} 不可达` : ''}${stale}`;
+    const stale = info.stale ? ' (çevrimdışı önbellek, güncel olmayabilir)' : '';
+    st.textContent = `Yeni sürüm var: ${info.tag}${src ? ` (${src})` : ''}${bad ? `; ${bad} erişilemiyor` : ''}${stale}`;
     showUpdateBtn(true);
-    btn.textContent = info.asset ? '立即更新' : '打开下载页';
+    btn.textContent = info.asset ? 'Şimdi güncelle' : 'İndirme sayfasını aç';
     btn.dataset.mode = info.asset ? 'auto' : 'manual';
     const note = $('updateNote');
     if (note && info.notes) {
       const brief = String(info.notes).split('\n').slice(0, 8).join('\n').trim();
-      if (brief) note.textContent = `更新内容：\n${brief}`;
+      if (brief) note.textContent = `Güncelleme notları:\n${brief}`;
     }
     if (bar) bar.hidden = true;
   } else {
     const src = (info.sources || []).map((x) => x.name).join(' / ');
-    const stale = info.stale ? '（离线缓存）' : '';
-    st.textContent = `已是最新版本（v${info.current}）${src ? ` · 经由 ${src}` : ''}${stale}`;
+    const stale = info.stale ? ' (çevrimdışı önbellek)' : '';
+    st.textContent = `En son sürümdesiniz (v${info.current})${src ? ` · ${src} üzerinden` : ''}${stale}`;
     showUpdateBtn(false);
     if (bar) bar.hidden = true;
   }
@@ -1166,12 +1166,12 @@ function renderUpdateProgress(p) {
   const bar = $('updateBar');
   const fill = $('updateBarFill');
   if (p.stage === 'error') {
-    if (st) st.textContent = `更新失败：${p.message || ''}`;
+    if (st) st.textContent = `Güncelleme başarısız: ${p.message || ''}`;
     if (bar) bar.hidden = true;
-    toast({ title: '更新失败', body: p.message || '', type: 'error' });
+    toast({ title: 'Güncelleme başarısız', body: p.message || '', type: 'error' });
     return;
   }
-  if (st) st.textContent = p.message || '正在更新…';
+  if (st) st.textContent = p.message || 'Güncelleniyor…';
   if (bar && fill) {
     bar.hidden = false;
     fill.style.width = `${Math.max(0, Math.min(100, p.percent || 0))}%`;
@@ -1187,15 +1187,15 @@ function bindUpdate() {
     if (!silent) {
       check.disabled = true;
       const old = check.textContent;
-      check.textContent = '检查中…';
-      $('updateState').textContent = '正在连接 GitHub…';
+      check.textContent = 'Denetleniyor…';
+      $('updateState').textContent = 'GitHub\'a bağlanılıyor…';
       try {
         const info = await api.updateCheck();
         renderUpdate(info);
-        if (info && info.hasUpdate) toast({ title: `发现新版本 ${info.tag}`, body: '点「立即更新」自动下载安装', type: 'info' });
-        else if (info && info.ok !== false) toast({ title: '已是最新版本', body: `v${info.current}`, type: 'ok' });
+        if (info && info.hasUpdate) toast({ title: `Yeni sürüm var: ${info.tag}`, body: '「Hemen güncelle」ile indirip kurun', type: 'info' });
+        else if (info && info.ok !== false) toast({ title: 'En son sürüm kullanılıyor', body: `v${info.current}`, type: 'ok' });
       } catch (e) {
-        $('updateState').textContent = `检查失败：${e.message}`;
+        $('updateState').textContent = `Denetim başarısız: ${e.message}`;
       } finally {
         check.disabled = false;
         check.textContent = old;
@@ -1214,17 +1214,17 @@ function bindUpdate() {
       return;
     }
     go.disabled = true;
-    go.textContent = '更新中…';
+    go.textContent = 'Güncelleniyor…';
     const r = await api.updateApply().catch((e) => ({ ok: false, error: e.message }));
     if (!r || !r.ok) {
       go.disabled = false;
-      go.textContent = '立即更新';
+      go.textContent = 'Şimdi güncelle';
       if (r && r.error && !r.manual) {
-        $('updateState').textContent = `更新失败：${r.error}`;
-        toast({ title: '更新失败', body: r.error, type: 'error' });
+        $('updateState').textContent = `Güncelleme başarısız: ${r.error}`;
+        toast({ title: 'Güncelleme başarısız', body: r.error, type: 'error' });
       }
     } else {
-      $('updateState').textContent = `已下载 v${r.version}，正在重启完成安装…`;
+      $('updateState').textContent = `v${r.version} indirildi, kurulumu bitirmek için yeniden başlatılıyor…`;
     }
   });
 
@@ -1245,17 +1245,17 @@ function bindSettings() {
       const r = await api.preflightApply().catch(() => null);
       btn.disabled = false;
       if (!r || !r.ok) {
-        toast({ type: 'error', title: '应用失败', body: (r && r.error) || '请稍后再试' });
+        toast({ type: 'error', title: 'Uygulama başarısız', body: (r && r.error) || 'Lütfen sonra yeniden deneyin' });
         return;
       }
       state.settings = r.settings;
       toast({
         type: 'ok',
-        title: '已按这台机器配置好',
-        body: `内存 ${Math.round((r.recommended.memoryMB || 0) / 1024)} GB / ${r.recommended.cores} 核 / ${r.recommended.renderSize}`
-          + (r.driverFile ? '；已生成驱动，下次开机会自动套用' : ''),
+        title: 'Bu makineye göre yapılandırıldı',
+        body: `Bellek ${Math.round((r.recommended.memoryMB || 0) / 1024)} GB / ${r.recommended.cores} çekirdek / ${r.recommended.renderSize}`
+          + (r.driverFile ? '; sürücü oluşturuldu, sonraki açılışta otomatik uygulanacak' : ''),
       });
-      if (r.driverError) toast({ type: 'warn', title: '驱动没写成功', body: r.driverError });
+      if (r.driverError) toast({ type: 'warn', title: 'Sürücü yazılamadı', body: r.driverError });
       fillSettings(r.settings);
       refreshStatus();
     });
@@ -1264,7 +1264,7 @@ function bindSettings() {
   if ($('btnDrvFolder')) {
     $('btnDrvFolder').addEventListener('click', async () => {
       const r = await api.driversOpenFolder().catch(() => null);
-      if (!r || !r.ok) toast({ type: 'error', title: '打不开驱动目录' });
+      if (!r || !r.ok) toast({ type: 'error', title: 'Sürücü dizini açılamadı' });
     });
   }
   if ($('btnDrvImport')) {
@@ -1272,10 +1272,10 @@ function bindSettings() {
       const r = await api.driversImport().catch(() => null);
       if (!r || r.canceled) return;
       if (!r.ok) {
-        toast({ type: 'error', title: '导入失败', body: (r.errors || []).slice(0, 3).join('；') });
+        toast({ type: 'error', title: 'İçe aktarma başarısız', body: (r.errors || []).slice(0, 3).join('；') });
         return;
       }
-      toast({ type: 'ok', title: '驱动已导入并启用', body: `${r.driver.name} v${r.driver.version}` });
+      toast({ type: 'ok', title: 'Sürücü içe aktarıldı ve etkinleştirildi', body: `${r.driver.name} v${r.driver.version}` });
       if (r.overview) renderDrivers(r.overview);
     });
   }
@@ -1283,8 +1283,8 @@ function bindSettings() {
     $('btnDrvExport').addEventListener('click', async () => {
       const r = await api.driversExportTemplate().catch(() => null);
       if (!r || r.canceled) return;
-      if (!r.ok) { toast({ type: 'error', title: '导出失败' }); return; }
-      toast({ type: 'ok', title: '模板已导出', body: '改完 effect 后放到驱动目录，点「刷新」即可生效' });
+      if (!r.ok) { toast({ type: 'error', title: 'Dışa aktarma başarısız' }); return; }
+      toast({ type: 'ok', title: 'Şablon dışa aktarıldı', body: 'effect değerlerini düzenleyip sürücü dizinine koyun, 「Yenile」ile etkinleşir' });
       refreshDrivers();
     });
   }
@@ -1307,7 +1307,7 @@ function bindSettings() {
       // 资源策略会连带改 liteMode / priorityMode / renderSize（主进程里翻译）
       state.settings = await api.setSettings({ engine: { resourceMode: e.target.value } });
       fillSettings(state.settings);
-      toast({ title: '资源策略已切换', body: '下一次打开应用生效', type: 'ok' });
+      toast({ title: 'Kaynak stratejisi değiştirildi', body: 'Uygulamayı bir sonraki açışta geçerli olur', type: 'ok' });
     });
   }
   if ($('setRenderSize')) {
@@ -1319,15 +1319,15 @@ function bindSettings() {
   if ($('setLocale')) {
     $('setLocale').addEventListener('change', async (e) => {
       state.settings = await api.setSettings({ engine: { locale: e.target.value } });
-      toast({ title: '系统语言已更新', body: '下次重启安卓运行时后生效', type: 'ok' });
+      toast({ title: 'Sistem dili güncellendi', body: 'Android çalışma zamanı yeniden başlatılınca geçerli olur', type: 'ok' });
     });
   }
   if ($('setChineseIme')) {
     $('setChineseIme').addEventListener('change', async (e) => {
       state.settings = await api.setSettings({ engine: { chineseIme: e.target.checked } });
       toast({
-        title: e.target.checked ? '已开启中文输入法' : '已关闭中文输入法',
-        body: '下次重启安卓运行时后生效',
+        title: e.target.checked ? 'Çince klavye etkinleştirildi' : 'Çince klavye kapatıldı',
+        body: 'Android çalışma zamanı yeniden başlatılınca geçerli olur',
         type: 'ok',
       });
     });
@@ -1344,17 +1344,17 @@ function bindSettings() {
   if ($('btnGrowData')) {
     $('btnGrowData').addEventListener('click', async () => {
       const gb = Number($('setDataGB').value) || 0;
-      if (!gb) { toast({ title: '先选一个容量', body: '「自动」表示由软件按磁盘余量决定，不需要扩容', type: 'info' }); return; }
+      if (!gb) { toast({ title: 'Önce bir kapasite seçin', body: '「Otomatik」boş diske göre yazılımın karar verdiği anlamına gelir, büyütmek gerekmez', type: 'info' }); return; }
       const { response } = await api.confirm({
-        title: '立刻把安卓数据分区扩容？',
-        message: `将把 /data 调整为 ${gb} GB（就地扩容，已装应用和存档都会保留）。`,
-        detail: '扩容需要先关掉正在运行的安卓应用，完成后下次打开应用会重新引导，约多花十几秒。',
-        okLabel: '开始扩容',
+        title: 'Android veri bölümü hemen büyütülsün mü?',
+        message: `/data ${gb} GB'a çıkarılacak (yerinde büyütme; yüklü uygulamalar ve kayıtlar korunur).`,
+        detail: 'Büyütme için çalışan Android uygulamaları kapatılır; sonrasında uygulamayı bir sonraki açış yeniden başlatılır ve birkaç saniye uzar.',
+        okLabel: 'Büyütmeyi başlat',
       });
       if (response !== 1) return;
       $('btnGrowData').disabled = true;
       const old = $('btnGrowData').textContent;
-      $('btnGrowData').textContent = '扩容中…';
+      $('btnGrowData').textContent = 'Büyütülüyor…';
       const r = await api.setDataSize(gb).catch((e) => ({ ok: false, error: e.message }));
       $('btnGrowData').disabled = false;
       $('btnGrowData').textContent = old;
@@ -1362,31 +1362,31 @@ function bindSettings() {
         // 快速启动的差量盘挡着：就地扩容做不到，只能按新容量重建 /data。
         // 这是明确的数据丢失操作，必须单独再确认一次。
         const again = await api.confirm({
-          title: '需要重置安卓数据才能扩容',
-          message: `安卓正在使用快速启动差量盘，就地扩容改不到它。要拿到 ${gb} GB 空间，必须按新容量重建 /data。`,
-          detail: '重建会清空已安装的应用与存档（模拟器本身和镜像不受影响）。确定继续吗？',
-          okLabel: '清空并重建',
+          title: 'Büyütme için Android verilerini sıfırlamak gerekiyor',
+          message: `Android hızlı başlatma fark diskini kullanıyor, yerinde büyütme bunu değiştirmez. ${gb} GB alan için /data yeni kapasiteyle yeniden oluşturulmalı.`,
+          detail: 'Yeniden oluşturma yüklü uygulamaları ve kayıtları siler (emülatör ve imaj etkilenmez). Devam edilsin mi?',
+          okLabel: 'Sil ve yeniden oluştur',
         });
         if (again.response !== 1) { refreshDataInfo(); return; }
         $('btnGrowData').disabled = true;
-        $('btnGrowData').textContent = '重建中…';
+        $('btnGrowData').textContent = 'Yeniden oluşturuluyor…';
         const rr = await api.resetAndResize(gb).catch((e) => ({ ok: false, error: e.message }));
         $('btnGrowData').disabled = false;
         $('btnGrowData').textContent = old;
         toast({
           type: rr && rr.ok ? 'ok' : 'error',
-          title: rr && rr.ok ? '已按新容量重建' : '重建失败',
+          title: rr && rr.ok ? 'Yeni kapasiteyle yeniden oluşturuldu' : 'Yeniden oluşturma başarısız',
           body: rr && rr.ok
-            ? `下次打开应用会按 ${gb} GB 重建 /data（首次进入会多等几十秒）`
-            : (rr && rr.error) || '未知错误',
+            ? `Uygulamayı bir sonraki açış /data'yı ${gb} GB olarak yeniden oluşturur (ilk girişte birkaç on saniye uzar)`
+            : (rr && rr.error) || 'Bilinmeyen hata',
         });
         refreshDataInfo();
         return;
       }
       toast({
         type: r && r.ok ? 'ok' : 'error',
-        title: r && r.ok ? '数据分区已扩容' : '扩容失败',
-        body: r && r.ok ? `现在约 ${r.fsGB || r.imageGB || gb} GB 可用` : (r && r.error) || '未知错误',
+        title: r && r.ok ? 'Veri bölümü büyütüldü' : 'Büyütme başarısız',
+        body: r && r.ok ? `Şu anda yaklaşık ${r.fsGB || r.imageGB || gb} GB kullanılabilir` : (r && r.error) || 'Bilinmeyen hata',
       });
       refreshDataInfo();
     });
@@ -1426,7 +1426,7 @@ function bindSettings() {
   if ($('setKeymapEnabled')) {
     $('setKeymapEnabled').addEventListener('change', async (e) => {
       await api.keymap.setEnabled(e.target.checked);
-      toast({ title: e.target.checked ? '键盘映射已开启' : '键盘映射已关闭', type: 'ok' });
+      toast({ title: e.target.checked ? 'Klavye eşlemesi açıldı' : 'Klavye eşlemesi kapatıldı', type: 'ok' });
     });
   }
   $('setDeepTrim').addEventListener('change', async (e) => {
@@ -1434,7 +1434,7 @@ function bindSettings() {
     // 关掉深度裁剪必须把之前 pm disable-user 的包恢复回来，否则影响是持久的
     if (!e.target.checked) {
       api.restoreSystemApps().catch(() => {});
-      toast({ title: '已恢复系统组件', body: '深度裁剪关闭，后台包正在恢复', type: 'info' });
+      toast({ title: 'Sistem bileşenleri geri yüklendi', body: 'Derin kırpma kapalı, arka plan paketleri geri yükleniyor', type: 'info' });
     }
   });
   $('setCompat').addEventListener('change', async (e) => {
@@ -1443,8 +1443,8 @@ function bindSettings() {
     const env = ((state.status = await api.runtimeStatus()).env) || {};
     const ok = env.playImage && env.playImage.ok;
     $('compatInstallField').hidden = !on || !!ok;
-    if (on && !ok) toast({ title: 'ARM 兼容模式已开启', body: '还需要下载 Google Play 兼容镜像（Android 14，约 1.5GB），点击下方按钮开始', type: 'info' });
-    else if (on) toast({ title: 'ARM 兼容模式已开启', body: '重启运行时后生效', type: 'info' });
+    if (on && !ok) toast({ title: 'ARM uyumluluk modu açıldı', body: 'Google Play uyumluluk imajını indirmek gerekiyor (Android 14, yaklaşık 1.5GB); aşağıdaki düğmeyle başlayın', type: 'info' });
+    else if (on) toast({ title: 'ARM uyumluluk modu açıldı', body: 'Çalışma zamanı yeniden başlatılınca geçerli olur', type: 'info' });
   });
   $('setAutoShortcut').addEventListener('change', (e) => save({ createShortcutOnInstall: e.target.checked }));
   $('setStartMenuShortcut').addEventListener('change', (e) => save({ createStartMenuShortcut: e.target.checked }));
@@ -1455,13 +1455,13 @@ function bindSettings() {
     const mode = e.target.value;
     $('portraitField').hidden = mode === 'fullscreen';
     state.settings = await api.setSettings({ display: { mode } });
-    toast({ title: mode === 'fullscreen' ? '已切全屏' : '已切竖屏窗口', type: 'ok' });
+    toast({ title: mode === 'fullscreen' ? 'Tam ekrana geçildi' : 'Dikey pencereye geçildi', type: 'ok' });
   });
   if ($('setAutoFullscreen')) {
     $('setAutoFullscreen').addEventListener('change', async (e) => {
       const on = e.target.value === 'on';
       state.settings = await api.setSettings({ display: { autoFullscreenOnLaunch: on } });
-      toast({ title: on ? '已开启自动全屏' : '已关闭自动全屏', body: '下次打开应用时生效', type: 'ok' });
+      toast({ title: on ? 'Otomatik tam ekran açıldı' : 'Otomatik tam ekran kapatıldı', body: 'Uygulamayı bir sonraki açışta geçerli olur', type: 'ok' });
     });
   }
   if ($('setOrientationMode')) {
@@ -1469,10 +1469,10 @@ function bindSettings() {
       const mode = e.target.value;
       state.settings = await api.setSettings({ display: { orientationMode: mode } });
       toast({
-        title: mode === 'auto' ? '已设为跟随应用' : (mode === 'landscape' ? '已强制横屏' : '已强制竖屏'),
+        title: mode === 'auto' ? 'Uygulamayı izle olarak ayarlandı' : (mode === 'landscape' ? 'Yatay zorlandı' : 'Dikey zorlandı'),
         body: mode === 'auto'
-          ? '下次打开应用时会按应用自己的方向选面板，方向不一致的话会重启一次运行时。'
-          : '下次打开应用时会重启一次运行时把面板切到指定方向，之后不再重启。',
+          ? 'Uygulamayı bir sonraki açışta panel uygulamanın kendi yönüne göre seçilir; yön uyuşmazsa çalışma zamanı bir kez yeniden başlar.'
+          : 'Uygulamayı bir sonraki açışta çalışma zamanı bir kez yeniden başlayıp panel belirtilen yöne çevrilir, sonrasında yeniden başlamaz.',
         type: 'ok',
       });
     });
@@ -1482,8 +1482,8 @@ function bindSettings() {
       const on = e.target.value === 'on';
       state.settings = await api.setSettings({ display: { tabletMode: on } });
       toast({
-        title: on ? '已打开平板排版' : '已关闭平板排版',
-        body: '下次打开应用时生效（会重启一次运行时来改逻辑密度）。',
+        title: on ? 'Tablet düzeni açıldı' : 'Tablet düzeni kapatıldı',
+        body: 'Uygulamayı bir sonraki açışta geçerli olur (mantıksal yoğunluğu değiştirmek için çalışma zamanı bir kez yeniden başlar).',
         type: 'ok',
       });
     });
@@ -1493,30 +1493,30 @@ function bindSettings() {
       const landscape = e.target.value === 'landscape';
       state.settings = await api.setSettings({ display: { landscape } });
       toast({
-        title: landscape ? '面板已设为横屏' : '面板已设为竖屏',
-        body: '下次打开应用时会重启一次运行时来切换物理面板方向（约十几秒），之后就不会再重启。',
+        title: landscape ? 'Panel yatay olarak ayarlandı' : 'Panel dikey olarak ayarlandı',
+        body: 'Uygulamayı bir sonraki açışta fiziksel panel yönü için çalışma zamanı bir kez yeniden başlar (yaklaşık on saniye), sonrasında yeniden başlamaz.',
         type: 'ok',
       });
     });
   }
   $('setPortrait').addEventListener('change', async (e) => {
     state.settings = await api.setSettings({ display: { portrait: e.target.value } });
-    toast({ title: '画面大小已更新', body: '下次打开应用或切换应用时生效', type: 'ok' });
+    toast({ title: 'Görüntü boyutu güncellendi', body: 'Uygulamayı bir sonraki açışta veya uygulama değiştirirken geçerli olur', type: 'ok' });
   });
   $('setWindowEmbed').addEventListener('change', async (e) => {
     const embed = e.target.value === 'embed';
     state.settings = await api.setSettings({ display: { windowEmbed: embed } });
     toast({
-      title: embed ? '已切回嵌入模式' : '已切到独立窗口模式',
-      body: '下次打开应用时生效。独立模式下安卓画面由模拟器自己开窗口，方向与缩放都由它处理。',
+      title: embed ? 'Gömülü moda dönüldü' : 'Ayrı pencere moduna geçildi',
+      body: 'Uygulamayı bir sonraki açışta geçerli olur. Ayrı modda Android görüntüsünü emülatör kendi penceresinde açar, yön ve boyutlandırma onun tarafından yönetilir.',
       type: 'ok',
     });
   });
   $('btnRebuildShortcuts').addEventListener('click', async () => {
     const r = await api.rebuildShortcuts();
     toast({
-      title: r && r.fixed && r.fixed.length ? '已补齐快捷方式' : '快捷方式都还在',
-      body: r && r.fixed && r.fixed.length ? r.fixed.join('、') : '桌面与开始菜单入口正常',
+      title: r && r.fixed && r.fixed.length ? 'Eksik kısayollar tamamlandı' : 'Tüm kısayollar yerinde',
+      body: r && r.fixed && r.fixed.length ? r.fixed.join('、') : 'Masaüstü ve başlat menüsü girişleri normal',
       type: 'ok',
     });
   });
@@ -1524,9 +1524,9 @@ function bindSettings() {
   $('btnDiagnostics').addEventListener('click', async () => {
     try {
       const r = await api.doctorReport();
-      toast({ title: '诊断报告已导出', body: `${r.diagnosis.title} · ${r.file}`, type: 'ok', sticky: true });
+      toast({ title: 'Tanılama raporu dışa aktarıldı', body: `${r.diagnosis.title} · ${r.file}`, type: 'ok', sticky: true });
     } catch (e) {
-      toast({ title: '导出失败', body: e.message, type: 'error' });
+      toast({ title: 'Dışa aktarma başarısız', body: e.message, type: 'error' });
     }
   });
 
@@ -1537,20 +1537,20 @@ function bindSettings() {
     try {
       const preview = await api.runtimeCleanup({ apply: false, includeSnapshots });
       if (!preview.candidates.length) {
-        toast({ title: '已经是精简状态', body: '没有可回收的旧镜像或快照。', type: 'ok' });
+        toast({ title: 'Zaten sade durumda', body: 'Geri kazanılacak eski imaj veya anlık görüntü yok.', type: 'ok' });
         return;
       }
       const r = await api.runtimeCleanup({ apply: true, includeSnapshots });
       if (r.cancelled) return;
       toast({
-        title: '清理完成',
-        body: `释放约 ${(r.saved / 1048576).toFixed(0)} MB（${r.removed.length} 项），已安装应用保留。`,
+        title: 'Temizlik tamamlandı',
+        body: `Yaklaşık ${(r.saved / 1048576).toFixed(0)} MB geri kazanıldı (${r.removed.length} öğe); yüklü uygulamalar korundu.`,
         type: 'ok',
       });
       const u = await api.runtimeUsage();
-      $('usageText').textContent = `共 ${u.totalText} · 可回收 ${u.reclaimableText}（${u.count} 项）`;
+      $('usageText').textContent = `Toplam ${u.totalText} · geri kazanılabilir ${u.reclaimableText} (${u.count} öğe)`;
     } catch (e) {
-      toast({ title: '清理失败', body: e.message, type: 'error' });
+      toast({ title: 'Temizlik başarısız', body: e.message, type: 'error' });
     } finally {
       btn.disabled = false;
     }
@@ -1563,41 +1563,41 @@ function bindSettings() {
     try {
       const first = await api.confirm({
         type: 'warning',
-        title: '重置安卓数据？',
-        message: '这会把安卓系统还原成「刚装好系统」的干净状态：',
-        detail: '• 删除全部已安装的第三方 app（含红果、游戏等）及其数据、登录态\n'
-          + '• 删除当前 AVD 的快速启动快照\n'
-          + '• 系统镜像本身不受影响，重新打开应用会再次冷启动建数据\n\n'
-          + '此操作不可撤销。是否继续？',
-        buttons: ['取消', '继续'],
+        title: 'Android verileri sıfırlansın mı?',
+        message: 'Bu işlem Android sistemini「yeni kurulmuş」temiz haline döndürür:',
+        detail: '• Kurulu tüm üçüncü taraf uygulamalar ve verileri, oturum bilgileri silinir\n'
+          + '• Geçerli AVD\'nin hızlı başlatma anlık görüntüsü silinir\n'
+          + '• Sistem imajı etkilenmez; uygulama yeniden açıldığında veriler soğuk başlatmayla kurulur\n\n'
+          + 'Bu işlem geri alınamaz. Devam edilsin mi?',
+        buttons: ['Vazgeç', 'Devam'],
         defaultId: 0,
         cancelId: 0,
       });
       if (!first || first.response !== 1) return;
       const second = await api.confirm({
         type: 'warning',
-        title: '再确认一次',
-        message: '已安装的 app 和它们的数据将被永久删除，确定要重置吗？',
-        detail: '可放心的是：系统镜像、其它 AVD、本机的 APK 缓存和图标都不会动。',
-        buttons: ['取消', '确定重置'],
+        title: 'Bir kez daha onaylayın',
+        message: 'Yüklü uygulamalar ve verileri kalıcı olarak silinecek. Sıfırlansın mı?',
+        detail: 'Şundan emin olabilirsiniz: sistem imajı, diğer AVD\'ler, bu makinedeki APK önbelleği ve simgeler etkilenmez.',
+        buttons: ['Vazgeç', 'Sıfırla'],
         defaultId: 0,
         cancelId: 0,
       });
       if (!second || second.response !== 1) return;
       const r = await api.runtimeResetData();
       if (!r || !r.ok) {
-        toast({ title: '重置失败', body: (r && r.error) || '请重试', type: 'error' });
+        toast({ title: 'Sıfırlama başarısız', body: (r && r.error) || 'Yeniden deneyin', type: 'error' });
         return;
       }
       toast({
-        title: '安卓数据已重置',
-        body: `释放约 ${r.reclaimedMB} MB，已安装应用记录已清空。`,
+        title: 'Android verileri sıfırlandı',
+        body: `Yaklaşık ${r.reclaimedMB} MB geri kazanıldı, yüklü uygulama kayıtları temizlendi.`,
         type: 'ok',
       });
       const u = await api.runtimeUsage();
-      $('usageText').textContent = `共 ${u.totalText} · 可回收 ${u.reclaimableText}（${u.count} 项）`;
+      $('usageText').textContent = `Toplam ${u.totalText} · geri kazanılabilir ${u.reclaimableText} (${u.count} öğe)`;
     } catch (e) {
-      toast({ title: '重置失败', body: e.message, type: 'error' });
+      toast({ title: 'Sıfırlama başarısız', body: e.message, type: 'error' });
     } finally {
       btn.disabled = false;
     }
@@ -1612,14 +1612,14 @@ function bindSettings() {
     try {
       const ok = await api.confirm({
         type: 'warning',
-        title: '修复虚拟机网络？',
-        message: '应用里需要联网的页面一直黑屏/转圈，通常是安卓虚拟机没有网络。',
-        detail: '修复会按「代价从小到大」依次尝试：\n\n'
-          + '1. 冷启动虚拟机（不加载快照）后等待联网 —— 不影响任何数据\n'
-          + '2. 仍不行才重置安卓数据 —— 应用清单保留、点开会自动重装，\n'
-          + '   但应用内的登录态、追剧记录等会丢失\n\n'
-          + '只影响当前 AVD，系统镜像和本机 APK 缓存都不动。整个过程约 1–5 分钟。是否继续？',
-        buttons: ['取消', '开始修复'],
+        title: 'Sanal makine ağı onarılsın mı?',
+        message: 'Uygulamalarda ağ gerektiren sayfalar siyah kalıp dönüyorsa genelde Android sanal makinesinde ağ yoktur.',
+        detail: 'Onarım「en küçük maliyetten büyüğe」sırayla dener:\n\n'
+          + '1. Sanal makineyi soğuk başlatır (anlık görüntü yüklemeden) ve ağın gelmesini bekler —— hiçbir veri etkilenmez\n'
+          + '2. Yine olmazsa Android verilerini sıfırlar —— uygulama listesi korunur, açınca otomatik yeniden kurulur,\n'
+          + '   ancak uygulama içi oturumlar, izleme geçmişi vb. kaybolur\n\n'
+          + 'Yalnızca geçerli AVD etkilenir; sistem imajı ve bu makinedeki APK önbelleği korunur. İşlem yaklaşık 1–5 dakika sürer. Devam edilsin mi?',
+        buttons: ['Vazgeç', 'Onarımı başlat'],
         defaultId: 0,
         cancelId: 0,
       });
@@ -1627,19 +1627,19 @@ function bindSettings() {
       const r = await api.runtimeRepairNetwork();
       if (!r || !r.ok) {
         toast({
-          title: '网络仍未恢复',
-          body: (r && r.error) || '重置后虚拟机还是没网，请检查本机网络/防火墙是否拦住了模拟器。',
+          title: 'Ağ hâlâ düzelmedi',
+          body: (r && r.error) || 'Sıfırlama sonrası sanal makinede hâlâ ağ yok; bu makinenin ağı/güvenlik duvarı emülatörü engelliyor olabilir.',
           type: 'error',
         });
         return;
       }
       toast({
-        title: '网络已恢复',
-        body: `${(r.network && r.network.ip) || '已联网'}${r.wiped ? '（为修复网络重置过安卓数据，点开应用会自动重装）' : '（未动你的数据）'}`,
+        title: 'Ağ düzeldi',
+        body: `${(r.network && r.network.ip) || 'ağa bağlı'}${r.wiped ? ' (ağı onarmak için Android verileri sıfırlandı; uygulamayı açınca otomatik yeniden kurulur)' : ' (verilerinize dokunulmadı)'}`,
         type: 'ok',
       });
     } catch (e) {
-      toast({ title: '修复失败', body: e.message, type: 'error' });
+      toast({ title: 'Onarım başarısız', body: e.message, type: 'error' });
     } finally {
       btn.disabled = false;
     }
@@ -1652,43 +1652,43 @@ function bindSettings() {
     try {
       const r = await api.leftoversScan();
       if (!r || !r.ok) {
-        toast({ title: '扫描失败', body: (r && r.error) || '请重试', type: 'error' });
+        toast({ title: 'Tarama başarısız', body: (r && r.error) || 'Yeniden deneyin', type: 'error' });
         return;
       }
       const items = r.items || [];
       if (!items.length) {
-        toast({ title: '很干净', body: '没有发现旧版本残留。', type: 'ok' });
+        toast({ title: 'Oldukça temiz', body: 'Eski sürüm kalıntısı bulunmadı.', type: 'ok' });
         return;
       }
       const mb = Math.round((r.totalBytes || 0) / 1048576);
       const lines = items.slice(0, 8).map((x) => `• ${x.note}：${x.path}`);
-      if (items.length > 8) lines.push(`…另有 ${items.length - 8} 项`);
+      if (items.length > 8) lines.push(`…ayrıca ${items.length - 8} öğe`);
       const ok = await api.confirm({
         type: 'warning',
-        title: '清理旧版本残留？',
-        message: `找到 ${items.length} 项残留，约 ${mb} MB：`,
-        detail: `${lines.join('\n')}\n\n只删除「旧版本程序目录 / 已失效的卸载项 / 更新临时文件」，`
-          + '当前正在运行的版本和你的应用数据都不会动。',
-        buttons: ['取消', '开始清理'],
+        title: 'Eski sürüm kalıntıları temizlensin mi?',
+        message: `${items.length} kalıntı bulundu, yaklaşık ${mb} MB:`,
+        detail: `${lines.join('\n')}\n\nYalnızca「eski sürüm program dizini / geçersiz kaldırma girdileri / güncelleme geçici dosyaları」silinir,`
+          + 'çalışan sürüm ve uygulama verileriniz etkilenmez.',
+        buttons: ['Vazgeç', 'Temizliği başlat'],
         defaultId: 1,
         cancelId: 0,
       });
       if (!ok || ok.response !== 1) return;
       const c = await api.leftoversClean(items);
       if (!c || !c.ok) {
-        toast({ title: '清理失败', body: (c && c.error) || '请重试', type: 'error' });
+        toast({ title: 'Temizlik başarısız', body: (c && c.error) || 'Yeniden deneyin', type: 'error' });
         return;
       }
-      const failNote = (c.failed && c.failed.length) ? `，${c.failed.length} 项被占用未删` : '';
+      const failNote = (c.failed && c.failed.length) ? `, ${c.failed.length} öğe kullanımda olduğu için silinemedi` : '';
       toast({
-        title: '已清理旧版本残留',
-        body: `删除 ${c.removed.length} 项，释放 ${c.freedMB || 0} MB${failNote}。`,
+        title: 'Eski sürüm kalıntıları temizlendi',
+        body: `${c.removed.length} öğe silindi, ${c.freedMB || 0} MB boşaltıldı${failNote}.`,
         type: 'ok',
       });
       const u = await api.runtimeUsage();
-      $('usageText').textContent = `共 ${u.totalText} · 可回收 ${u.reclaimableText}（${u.count} 项）`;
+      $('usageText').textContent = `Toplam ${u.totalText} · geri kazanılabilir ${u.reclaimableText} (${u.count} öğe)`;
     } catch (e) {
-      toast({ title: '清理失败', body: e.message, type: 'error' });
+      toast({ title: 'Temizlik başarısız', body: e.message, type: 'error' });
     } finally {
       btn.disabled = false;
     }
@@ -1704,8 +1704,8 @@ function bindSettings() {
       const r = await api.rebuildShortcuts().catch(() => ({ ok: false }));
       const fixed = (r && r.fixed) || [];
       toast(fixed.length
-        ? { title: '快捷方式已重建', body: fixed.join('、'), type: 'ok' }
-        : { title: '快捷方式都在', body: '没有需要重建的入口', type: 'info' });
+        ? { title: 'Kısayollar yeniden oluşturuldu', body: fixed.join('、'), type: 'ok' }
+        : { title: 'Kısayollar zaten yerinde', body: 'Yeniden oluşturulacak giriş yok', type: 'info' });
     } finally {
       btn.disabled = false;
     }
@@ -1716,26 +1716,26 @@ function bindSettings() {
     const picked = await api.openDir();
     if (!picked) return;
     $('setSharedDir').value = picked;
-    toast({ title: '已选新目录', body: '点「保存并迁移」把旧文件搬过去', type: 'info' });
+    toast({ title: 'Yeni dizin seçildi', body: 'Eski dosyaları taşımak için「Kaydet ve taşı」ya basın', type: 'info' });
   });
   $('btnSaveShared').addEventListener('click', async () => {
     const dir = $('setSharedDir').value.trim();
-    if (!dir) { toast({ title: '请先填写或浏览目录', type: 'error' }); return; }
+    if (!dir) { toast({ title: 'Önce dizini yazın veya göz atın', type: 'error' }); return; }
     const btn = $('btnSaveShared');
     btn.disabled = true;
     const r = await api.setSharedDir(dir).catch(() => ({ ok: false }));
     btn.disabled = false;
     if (r.ok) {
       const moved = r.oldDir && r.oldDir !== r.newDir;
-      toast({ title: '共享目录已更新', body: moved ? '旧目录里已有的文件已迁移到新目录' : '已保存', type: 'ok' });
+      toast({ title: 'Paylaşılan dizin güncellendi', body: moved ? 'Eski dizindeki dosyalar yeni dizine taşındı' : 'Kaydedildi', type: 'ok' });
     } else {
-      toast({ title: '保存失败', body: r.error, type: 'error' });
+      toast({ title: 'Kaydetme başarısız', body: r.error, type: 'error' });
     }
   });
 
   // 一键卸载 ApkStart 本体（取消 .apk 关联 + 启动卸载程序；便携版手动删除）
   $('btnUninstall').addEventListener('click', async () => {
-    const ok = window.confirm('确定卸载 ApkStart？\n\n将取消 .apk 文件关联并移除程序。此操作不可撤销。');
+    const ok = window.confirm('ApkStart kaldırılsın mı?\n\n.apk dosya ilişkilendirmesi kaldırılacak ve program silinecek. Bu işlem geri alınamaz.');
     if (!ok) return;
     const btn = $('btnUninstall');
     btn.disabled = true;
@@ -1743,44 +1743,44 @@ function bindSettings() {
     if (r.ok && r.portable) {
       btn.disabled = false;
       toast({
-        title: '便携版无法自动卸载',
-        body: `请手动删除程序目录（${r.exeDir}）与数据目录（${r.dataDir}）`,
+        title: 'Taşınabilir sürüm otomatik kaldırılamaz',
+        body: `Program dizinini (${r.exeDir}) ve veri dizinini (${r.dataDir}) elle silin`,
         type: 'info', sticky: true,
       });
       return;
     }
     if (!r.ok) {
       btn.disabled = false;
-      toast({ title: '卸载失败', body: r.error, type: 'error' });
+      toast({ title: 'Kaldırma başarısız', body: r.error, type: 'error' });
       return;
     }
-    toast({ title: '正在卸载…', body: '卸载程序已启动，ApkStart 即将退出', type: 'ok', sticky: true });
+    toast({ title: 'Kaldırılıyor…', body: 'Kaldırıcı başlatıldı, ApkStart kapanıyor', type: 'ok', sticky: true });
   });
 
   // ARM 兼容镜像下载（带进度 toast）
   $('btnInstallPlay').addEventListener('click', async () => {
     const btn = $('btnInstallPlay');
     btn.disabled = true;
-    const t = toast({ title: '开始下载 ARM 兼容镜像', body: '准备中…', sticky: true, spinner: true, progress: 3 });
+    const t = toast({ title: 'ARM uyumluluk imajı indiriliyor', body: 'Hazırlanıyor…', sticky: true, spinner: true, progress: 3 });
     const un = api.on('provision:progress', (p) => {
       if (p.component !== 'playimg') return;
-      t.update({ title: '下载 ARM 兼容镜像', body: p.message || '', progress: p.percent });
+      t.update({ title: 'ARM uyumluluk imajı indiriliyor', body: p.message || '', progress: p.percent });
     });
     try {
       const r = await api.installPlayImage();
       if (r && r.ok) {
-        t.update({ title: 'ARM 兼容镜像就绪', body: '重启运行时后生效', progress: 100 });
+        t.update({ title: 'ARM uyumluluk imajı hazır', body: 'Çalışma zamanı yeniden başlatılınca geçerli olur', progress: 100 });
         setTimeout(() => t.dismiss(), 3000);
         $('compatInstallField').hidden = true;
         refreshStatus();
       } else {
-        t.update({ title: '兼容镜像下载失败', body: (r && r.error) || '未知错误', progress: null });
+        t.update({ title: 'Uyumluluk imajı indirilemedi', body: (r && r.error) || 'Bilinmeyen hata', progress: null });
         t.dismiss();
-        toast({ title: '兼容镜像下载失败', body: (r && r.error) || '未知错误', type: 'error' });
+        toast({ title: 'Uyumluluk imajı indirilemedi', body: (r && r.error) || 'Bilinmeyen hata', type: 'error' });
       }
     } catch (e) {
       t.dismiss();
-      toast({ title: '兼容镜像下载失败', body: e.message, type: 'error' });
+      toast({ title: 'Uyumluluk imajı indirilemedi', body: e.message, type: 'error' });
     } finally {
       un();
       btn.disabled = false;
@@ -1796,7 +1796,7 @@ function bindSettings() {
     $('compatInstallField').hidden = !on || !!ok;
     if (env.playImage) {
       $('compatImgStatus').textContent = ok
-        ? `已就绪（${(env.playImage.size / 1073741824).toFixed(2)} GB）` : '未下载';
+        ? `Hazır (${(env.playImage.size / 1073741824).toFixed(2)} GB)` : 'İndirilmedi';
     }
   })();
   $('btnOpenData').addEventListener('click', async () => {
@@ -1810,7 +1810,7 @@ function bindSettings() {
     if (!picked) return;
     await api.setSettings({ runtime: { dir: picked } });
     $('setRuntimeDir').value = picked;
-    toast({ title: '数据目录已更新', body: '请重启 ApkStart 使其生效（旧数据不会自动搬移）', type: 'ok', sticky: true });
+    toast({ title: 'Veri dizini güncellendi', body: 'Geçerli olması için ApkStart\'ı yeniden başlatın (eski veriler otomatik taşınmaz)', type: 'ok', sticky: true });
   });
 
   // 安卓数据目录（AVD + 快照）：真正吃盘的那块，单独指到别的盘
@@ -1821,8 +1821,8 @@ function bindSettings() {
       await api.setSettings({ runtime: { avdDir: picked } });
       $('setAvdDir').value = picked;
       toast({
-        title: '安卓数据目录已更新',
-        body: '请重启 ApkStart 使其生效。旧目录里的 apkstart.avd 可以整体搬到新目录，再删掉旧的。',
+        title: 'Android veri dizini güncellendi',
+        body: 'Geçerli olması için ApkStart\'ı yeniden başlatın. Eski dizindeki apkstart.avd olduğu gibi yeni dizine taşınıp eskisi silinebilir.',
         type: 'ok',
         sticky: true,
       });
@@ -1838,15 +1838,15 @@ function bindSettings() {
 
   $('btnRuntimeStart').addEventListener('click', async () => {
     const el = $('probeResult');
-    el.textContent = '正在启动…';
+    el.textContent = 'Başlatılıyor…';
     const r = await api.runtimeStart();
-    el.textContent = r.ok ? `已就绪：${r.engine}` : `启动失败：${r.error}`;
+    el.textContent = r.ok ? `Hazır: ${r.engine}` : `Başlatma başarısız: ${r.error}`;
     refreshStatus();
   });
 
   $('btnRuntimeStop').addEventListener('click', async () => {
     await api.runtimeStop();
-    $('probeResult').textContent = '已停止内置虚拟机';
+    $('probeResult').textContent = 'Dahili sanal makine durduruldu';
     refreshStatus();
   });
 
@@ -1854,14 +1854,14 @@ function bindSettings() {
     const btn = $('btnAssoc');
     if (btn.dataset.on === '1') {
       await api.assocUnregister();
-      btn.textContent = '未关联 · 点击开启';
+      btn.textContent = 'İlişkilendirilmedi · açmak için tıklayın';
       btn.dataset.on = '0';
-      toast({ title: '.apk 关联已取消' });
+      toast({ title: '.apk ilişkilendirmesi kaldırıldı' });
     } else {
       const r = await api.assocRegister();
-      btn.textContent = '已关联 · 点击取消';
+      btn.textContent = 'İlişkilendirildi · iptal için tıklayın';
       btn.dataset.on = '1';
-      toast({ title: '.apk 关联已开启', body: r.ok ? '现在双击 APK 会直接安装到 ApkStart' : '', type: r.ok ? 'ok' : 'error' });
+      toast({ title: '.apk ilişkilendirmesi açıldı', body: r.ok ? 'Artık APK\'ya çift tıklamak doğrudan ApkStart\'a kurar' : '', type: r.ok ? 'ok' : 'error' });
     }
   });
 }
@@ -1878,7 +1878,7 @@ function bindEvents() {
   });
 
   $('btnSettings').addEventListener('click', openSettings);
-  // 状态标签也当入口：点「需要部署 / 引导中 / Android 14」直接进设置的运行时面板
+  // 状态标签也当入口：点「需要部署 / Başlatılıyor / Android 14」直接进设置的运行时面板
   $('engineTag').addEventListener('click', () => showSetup(true));
   $('btnCloseSettings').addEventListener('click', closeSettings);
   $('btnDoneSettings').addEventListener('click', closeSettings);
@@ -1914,33 +1914,33 @@ function bindEvents() {
     if (act === 'emulator' || act === 'sysimg' || act === 'accel'
       || act === 'adb' || act === 'qemu' || act === 'iso' || act === 'disk') {
       const r = await runStep(act);
-      if (!r.ok) toast({ title: '操作失败', body: r.error, type: 'error', sticky: true });
+      if (!r.ok) toast({ title: 'İşlem başarısız', body: r.error, type: 'error', sticky: true });
       return;
     }
     if (act === 'isoImport') {
       const r = await api.importIso();
-      if (r.ok) { toast({ title: '系统镜像已导入', body: r.path, type: 'ok' }); refreshStatus(); }
-      else if (!r.canceled) toast({ title: '导入失败', body: r.error, type: 'error' });
+      if (r.ok) { toast({ title: 'Sistem imajı içe aktarıldı', body: r.path, type: 'ok' }); refreshStatus(); }
+      else if (!r.canceled) toast({ title: 'İçe aktarma başarısız', body: r.error, type: 'error' });
       return;
     }
     if (act === 'diskImport') {
       const r = await api.importDisk();
-      if (r.ok) { toast({ title: '虚拟磁盘已导入', body: '可直接启动运行时', type: 'ok' }); refreshStatus(); }
-      else if (!r.canceled) toast({ title: '导入失败', body: r.error, type: 'error' });
+      if (r.ok) { toast({ title: 'Sanal disk içe aktarıldı', body: 'Çalışma zamanı doğrudan başlatılabilir', type: 'ok' }); refreshStatus(); }
+      else if (!r.canceled) toast({ title: 'İçe aktarma başarısız', body: r.error, type: 'error' });
       return;
     }
     if (act === 'install') { await startInstall(); return; }
     if (act === 'vmStart') {
-      const t = toast({ title: '正在启动运行时…', body: '首次启动需要引导 Android 系统', sticky: true, spinner: true });
+      const t = toast({ title: 'Çalışma zamanı başlatılıyor…', body: 'İlk başlatmada Android sistemi kurulur', sticky: true, spinner: true });
       const r = await api.runtimeStart();
-      if (r.ok) { t.update({ title: '运行时已就绪', type: 'ok' }); setTimeout(t.dismiss, 2200); }
-      else t.update({ title: '启动失败', body: r.error, type: 'error' });
+      if (r.ok) { t.update({ title: 'Çalışma zamanı hazır', type: 'ok' }); setTimeout(t.dismiss, 2200); }
+      else t.update({ title: 'Başlatma başarısız', body: r.error, type: 'error' });
       refreshStatus();
       return;
     }
     if (act === 'vmStop') {
       await api.runtimeStop();
-      toast({ title: '运行时会话已结束' });
+      toast({ title: 'Çalışma zamanı oturumu sona erdi' });
       refreshStatus();
     }
   });
@@ -1957,9 +1957,9 @@ function bindEvents() {
     btnSync.disabled = true;
     try {
       await api.syncShared();
-      toast({ title: '已同步共享目录', type: 'ok' });
+      toast({ title: 'Paylaşılan dizin eşitlendi', type: 'ok' });
     } catch (_) {
-      toast({ title: '同步失败', body: '运行时未就绪时会跳过同步', type: 'error' });
+      toast({ title: 'Eşitleme başarısız', body: 'Çalışma zamanı hazır değilse eşitleme atlanır', type: 'error' });
     } finally {
       btnSync.disabled = false;
     }
@@ -2033,7 +2033,7 @@ function bindEvents() {
       .map((f) => { try { return api.pathForFile(f); } catch (_) { return null; } })
       .filter((p) => p && /\.apk$/i.test(p));
     if (paths.length) installFiles(paths);
-    else toast({ title: '只能拖入 .apk 文件', type: 'error' });
+    else toast({ title: 'Yalnızca .apk dosyaları sürüklenebilir', type: 'error' });
   });
 
   // 主进程事件
@@ -2042,8 +2042,8 @@ function bindEvents() {
     if (installToast) { try { installToast.dismiss(); } catch (_) { /* ignore */ } installToast = null; }
     const name = p && p.file ? String(p.file).split(/[\\/]/).pop() : '';
     toast({
-      title: name ? `安装失败：${name}` : '安装失败',
-      body: friendlyInstallErrorText((p && p.message) || '未知错误'),
+      title: name ? `Kurulum başarısız: ${name}` : 'Kurulum başarısız',
+      body: friendlyInstallErrorText((p && p.message) || 'Bilinmeyen hata'),
       type: 'error',
     });
   });
@@ -2091,11 +2091,11 @@ async function init() {
 let startupInfo = null;
 
 function greetingOf(h) {
-  if (h < 5) return '夜深了';
-  if (h < 11) return '早上好';
-  if (h < 13) return '中午好';
-  if (h < 18) return '下午好';
-  return '晚上好';
+  if (h < 5) return 'İyi geceler';
+  if (h < 11) return 'Günaydın';
+  if (h < 13) return 'İyi günler';
+  if (h < 18) return 'İyi öğleden sonralar';
+  return 'İyi akşamlar';
 }
 
 function bindWelcome() {
@@ -2125,17 +2125,17 @@ async function maybeShowWelcome() {
   if (!(startupInfo && startupInfo.autostart) && cfg.lastDate === today) return;
 
   const h = new Date().getHours();
-  $('welcomeHi').textContent = `${greetingOf(h)}，欢迎回来`;
+  $('welcomeHi').textContent = `${greetingOf(h)}, tekrar hoş geldiniz`;
   const ver = (startupInfo && startupInfo.version) || (state.status && state.status.version) || '';
   const ready = state.status && state.status.ready;
-  $('welcomeSub').textContent = `ApkStart${ver ? ` v${ver}` : ''} · ${ready ? '运行时就绪，点开即用' : '运行时会按需自动准备'}`;
+  $('welcomeSub').textContent = `ApkStart${ver ? ` v${ver}` : ''} · ${ready ? 'çalışma zamanı hazır, tıklayınca açılır' : 'çalışma zamanı gerektiğinde otomatik hazırlanır'}`;
 
   const apps = (state.apps || []).length;
   const dev = $('statusDevice') ? $('statusDevice').textContent.trim() : '';
   const chips = [
-    { k: String(apps), v: '已装应用' },
-    { k: ready ? '就绪' : '待命', v: '安卓运行时' },
-    { k: dev ? dev.replace(/^.*?(\d+)/, '$1') : '—', v: '设备 / 端口' },
+    { k: String(apps), v: 'Yüklü uygulama' },
+    { k: ready ? 'hazır' : 'beklemede', v: 'Android çalışma zamanı' },
+    { k: dev ? dev.replace(/^.*?(\d+)/, '$1') : '—', v: 'Cihaz / port' },
   ];
   $('welcomeStats').innerHTML = chips
     .map((c) => `<div class="welcome-stat"><b>${esc(c.k)}</b><span>${esc(c.v)}</span></div>`)
@@ -2155,20 +2155,20 @@ function renderWelcomeTips() {
   const apps = (state.apps || []).length;
   const tips = [];
   if (lastUpdate && lastUpdate.hasUpdate) {
-    tips.push(`发现新版本 <b>${esc(lastUpdate.tag || '')}</b>，可在「设置 → 软件更新」一键更新`);
+    tips.push(`Yeni sürüm var <b>${esc(lastUpdate.tag || '')}</b>; 「Ayarlar → Yazılım güncelleme」ile tek tıkla güncelleyin`);
   }
   if (!apps) {
-    tips.push('把 APK 拖进窗口就能安装，装完会自动生成桌面图标');
+    tips.push('APK\'yı pencereye sürükleyerek kurabilirsiniz; kurulum bitince masaüstü simgesi otomatik oluşur');
   } else {
-    tips.push('双击应用卡片即可在独立窗口中运行，右上角可旋转 / 缩放 / 关闭');
+    tips.push('Uygulama kartına çift tıklayınca kendi penceresinde açılır; sağ üstten döndürme / boyutlandırma / kapatma yapılır');
   }
-  tips.push('关窗口只是退出那个应用，安卓环境会留着，下次点开更快');
+  tips.push('Pencereyi kapatmak yalnızca o uygulamadan çıkar, Android ortamı açık kalır, sonraki açılış daha hızlı olur');
   box.innerHTML = tips
     .map((t, i) => `<div class="welcome-tip"><i>${i + 1}</i><span>${t}</span></div>`)
     .join('');
 }
 
-/* ---------------- 环境自检 ---------------- */
+/* ---------------- Ortam denetimi ---------------- */
 
 let envBusy = false;
 
@@ -2195,7 +2195,7 @@ function renderEnvCheck(r) {
   if (chip) {
     const errs = issues.filter((i) => i.severity === 'error').length;
     chip.hidden = issues.length === 0;
-    chip.textContent = errs ? `${errs} 项待修复` : `${issues.length} 项提示`;
+    chip.textContent = errs ? `${errs} düzeltme bekliyor` : `${issues.length} uyarı`;
     chip.className = `status-chip${errs ? ' err' : ''}`;
     chip.title = issues.map((i) => i.title).join('；');
   }
@@ -2205,9 +2205,9 @@ function renderEnvCheck(r) {
     box.innerHTML = `
       <div class="env-check-ok">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
-        <span>环境自检通过，没有发现会影响运行的问题。</span>
+        <span>Ortam denetimi geçti, çalışmayı etkileyecek bir sorun bulunmadı.</span>
         <span style="flex:1"></span>
-        <button class="btn ghost sm" id="btnEnvRecheck">重新检查</button>
+        <button class="btn ghost sm" id="btnEnvRecheck">Yeniden denetle</button>
       </div>`;
     const re = $('btnEnvRecheck');
     if (re) re.addEventListener('click', selfCheck);
@@ -2218,12 +2218,12 @@ function renderEnvCheck(r) {
   box.hidden = false;
   box.innerHTML = `
     <div class="env-check-head">
-      <span class="ec-title">环境自检</span>
-      ${errs ? `<span class="ec-count">${errs} 个严重</span>` : ''}
-      ${warns ? `<span class="ec-count warn">${warns} 个提示</span>` : ''}
+      <span class="ec-title">Ortam denetimi</span>
+      ${errs ? `<span class="ec-count">${errs} kritik</span>` : ''}
+      ${warns ? `<span class="ec-count warn">${warns} uyarı</span>` : ''}
       <span class="ec-spacer"></span>
-      <button class="btn ghost sm" id="btnEnvRecheck">重新检查</button>
-      <button class="btn primary sm" id="btnEnvFixAll">一键修复全部</button>
+      <button class="btn ghost sm" id="btnEnvRecheck">Yeniden denetle</button>
+      <button class="btn primary sm" id="btnEnvFixAll">Hepsini tek tıkla onar</button>
     </div>
     <div class="env-check-list">
       ${issues.map((i) => `
@@ -2233,7 +2233,7 @@ function renderEnvCheck(r) {
             <div class="ec-name">${esc(i.title)}</div>
             <div class="ec-hint">${esc(i.hint || '')}</div>
           </div>
-          ${i.fix ? `<button class="ec-fix" data-code="${esc(i.code)}">修复</button>` : ''}
+          ${i.fix ? `<button class="ec-fix" data-code="${esc(i.code)}">Onar</button>` : ''}
         </div>`).join('')}
     </div>`;
   const re = $('btnEnvRecheck');
@@ -2254,19 +2254,19 @@ async function fixIssue(issue) {
       const r = await api.installVcRedist().catch(() => ({ ok: false }));
       if (!r.ok && r.reason === 'no-installer') {
         api.openExternal('https://learn.microsoft.com/zh-CN/cpp/windows/latest-supported-vc-redist?view=msvc-170#visual-studio-2015-2017-2019-and-2022');
-        toast({ title: '未找到内置安装包', body: '已打开微软官方下载页，请下载 x64 版本', type: 'info' });
+        toast({ title: 'Pakete dahil kurulum dosyası bulunamadı', body: 'Microsoft\'un resmi indirme sayfası açıldı, x64 sürümünü indirin', type: 'info' });
         break;
       }
       toast(r.ok
-        ? { title: 'VC++ 运行库已安装', type: 'ok' }
-        : { title: '安装未完成', body: r.error || '请重试', type: 'error' });
+        ? { title: 'VC++ çalışma zamanı kuruldu', type: 'ok' }
+        : { title: 'Kurulum tamamlanmadı', body: r.error || 'Yeniden deneyin', type: 'error' });
       break;
     }
     case 'virtualization': {
-      const t = toast({ title: '正在开启硬件加速…', body: '请在弹出的窗口点「是」', sticky: true, spinner: true });
+      const t = toast({ title: 'Donanım hızlandırma açılıyor…', body: 'Açılan pencerede「Evet」e basın', sticky: true, spinner: true });
       const r = await api.enableVirtualization().catch(() => ({ ok: false }));
       if (r.ok) {
-        t.update({ title: '硬件加速已启用', body: r.restartNeeded ? '请重启电脑以获得最佳性能' : (r.note || ''), type: 'ok' });
+        t.update({ title: 'Donanım hızlandırma etkin', body: r.restartNeeded ? 'En iyi performans için bilgisayarı yeniden başlatın' : (r.note || ''), type: 'ok' });
         setTimeout(t.dismiss, 3200);
       } else if (r.manual) {
         // 商店（MSIX）版：包固定 mediumIL，通常拿不到管理员授权。
@@ -2275,44 +2275,44 @@ async function fixIssue(issue) {
         t.dismiss();
         await api.openWindowsFeatures?.().catch(() => null);
         toast({
-          title: '需要手动开启一次（仅此一次）',
-          body: r.note || '在打开的窗口里勾选「Windows 虚拟机监控程序平台」，确定后重启电脑。',
+          title: 'Bir kez elle açmak gerekiyor (yalnızca bir kez)',
+          body: r.note || 'Açılan pencerede「Windows Hipervizör Platformu」nu işaretleyip onayladıktan sonra bilgisayarı yeniden başlatın.',
           type: 'info',
           sticky: true,
         });
       } else if (r.cancelled) {
-        t.update({ title: '已取消', body: r.error || '没有拿到管理员授权，硬件加速没有改动。', type: 'info', spinner: false });
+        t.update({ title: 'İptal edildi', body: r.error || 'Yönetici izni alınamadı, donanım hızlandırma değişmedi.', type: 'info', spinner: false });
         setTimeout(t.dismiss, 4200);
       } else {
-        t.update({ title: '未能开启', body: r.error || r.note || '请重试', type: 'error', sticky: true });
+        t.update({ title: 'Açılamadı', body: r.error || r.note || 'Yeniden deneyin', type: 'error', sticky: true });
       }
       break;
     }
     case 'disk': {
       // 主进程会弹出原生确认框（含可释放空间预览），这里不再重复 confirm
       const r = await api.runtimeCleanup({ apply: true }).catch(() => null);
-      if (!r) { toast({ title: '清理失败', body: '请重试', type: 'error' }); break; }
+      if (!r) { toast({ title: 'Temizlik başarısız', body: 'Yeniden deneyin', type: 'error' }); break; }
       if (r.cancelled) break;
-      toast({ title: '清理完成', body: `释放约 ${((r.saved || 0) / 1048576).toFixed(0)} MB`, type: 'ok' });
+      toast({ title: 'Temizlik tamamlandı', body: `Yaklaşık ${((r.saved || 0) / 1048576).toFixed(0)} MB geri kazanıldı`, type: 'ok' });
       break;
     }
     case 'path': {
-      toast({ title: '建议改到纯英文目录', body: '在 设置 → 系统集成 里修改「运行时数据目录」，再重启软件。', type: 'info', sticky: true });
+      toast({ title: 'Tamamen İngilizce bir dizine taşımanız önerilir', body: 'Ayarlar → Sistem entegrasyonu bölümünde「Çalışma zamanı veri dizini」ni değiştirip uygulamayı yeniden başlatın.', type: 'info', sticky: true });
       openSettings();
       break;
     }
     case 'deploy': {
-      toast({ title: '正在补齐缺失的运行时组件…', type: 'info', sticky: true, spinner: true });
+      toast({ title: 'Eksik çalışma zamanı bileşenleri tamamlanıyor…', type: 'info', sticky: true, spinner: true });
       await deployAll();
       break;
     }
     case 'lock': {
       const r = await api.clearLocks().catch(() => ({ ok: false }));
-      toast(r.ok ? { title: '已清理残留锁文件', type: 'ok' } : { title: '清理失败', body: r.error, type: 'error' });
+      toast(r.ok ? { title: 'Artık kilit dosyaları temizlendi', type: 'ok' } : { title: 'Temizlik başarısız', body: r.error, type: 'error' });
       break;
     }
     default:
-      toast({ title: '暂不支持自动修复', body: issue.hint || '', type: 'info' });
+      toast({ title: 'Otomatik onarım henüz desteklenmiyor', body: issue.hint || '', type: 'info' });
   }
   // 修复后重新自检，刷新横幅与状态
   setTimeout(selfCheck, 600);
@@ -2331,5 +2331,5 @@ async function fixAllIssues(issues) {
 
 init().catch((e) => {
   console.error(e);
-  toast({ title: '初始化失败', body: e.message, type: 'error', sticky: true });
+  toast({ title: 'Başlatma başarısız', body: e.message, type: 'error', sticky: true });
 });

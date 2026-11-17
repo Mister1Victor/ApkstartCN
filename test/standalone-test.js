@@ -48,16 +48,16 @@ function touch(dir, rel, bytes = 8) {
   const store = require('../src/core/store');
   const settings = store.getSettings();
 
-  test('默认引擎是自带运行时', () => {
+  test('默认Motor是自带Çalışma zamanı', () => {
     assert.equal(settings.engine.mode, 'builtin', `默认 mode=${settings.engine.mode}`);
   });
 
-  test('注册表里只有 builtin，没有第二个底座', () => {
-    assert.equal(backends.REGISTRY.length, 1, `注册表有 ${backends.REGISTRY.length} 个底座`);
+  test('注册表里只Toplam builtin, 没有第二个底座', () => {
+    assert.equal(backends.REGISTRY.length, 1, `注册表Toplam ${backends.REGISTRY.length}底座`);
     assert.deepEqual(backends.describe().map((d) => d.id), ['builtin']);
   });
 
-  test('任何残留的 mode 都只会创建 builtin（mumu / fydeos / attach / 乱填）', () => {
+  test('任何残留的 mode 都只会Oluşturuluyor: builtin (mumu / fydeos / attach / 乱填)', () => {
     for (const mode of ['mumu', 'fydeos', 'attach', 'ldplayer', 'whatever', '']) {
       const made = backends.create({
         appRoot: ROOT, settings: { engine: { mode } }, store, log: () => {},
@@ -67,14 +67,14 @@ function touch(dir, rel, bytes = 8) {
     }
   });
 
-  test('显式传别的 id 也压不过去（回退路径不会再建出第三方底座）', () => {
+  test('显式传别的 id 也压不过去 (回退路径不会再建出第三方底座)', () => {
     const made = backends.create({
       appRoot: ROOT, settings: { engine: { mode: 'builtin' } }, store, log: () => {}, id: 'mumu',
     });
     assert.equal(made.id, 'builtin', '显式 id=mumu 仍然被接受了');
   });
 
-  test('自动挑选不再探测任何外部运行时', async () => {
+  test('Otomatik挑选不再探测任何外部Çalışma zamanı', async () => {
     // 同步断言：autoPick 必须是「直接返回 builtin」，源码里不许出现 probe()
     const src = read('src', 'core', 'backends', 'index.js');
     assert(!/\.probe\(/.test(src), '注册表仍在探测外部模拟器');
@@ -84,9 +84,9 @@ function touch(dir, rel, bytes = 8) {
 
   console.log('\n[独立运行 · 第三方底座代码已删除]');
 
-  test('backends/ 下只有 base / builtin / index', () => {
+  test('backends/ 下只Toplam base / builtin / index', () => {
     const files = fs.readdirSync(path.join(ROOT, 'src', 'core', 'backends')).sort();
-    assert.deepEqual(files, ['base.js', 'builtin.js', 'index.js'], `实际：${files.join(', ')}`);
+    assert.deepEqual(files, ['base.js', 'builtin.js', 'index.js'], `实际: ${files.join(', ')}`);
   });
 
   test('mumu / fydeos / mumu-compat / frame 模块都不在了', () => {
@@ -100,20 +100,20 @@ function touch(dir, rel, bytes = 8) {
     }
   });
 
-  test('引擎里没有「第三方底座不可用 → 回退」这类分支', () => {
+  test('Motor里没有「第三方底座不可用 → 回退」这类分支', () => {
     const src = read('src', 'core', 'engine.js');
     assert(!/_fallbackFrom/.test(src), '还留着第三方底座的回退标记');
     assert(!/backend\.id !== 'builtin'/.test(src), '还有按底座 id 分叉的逻辑');
-    assert(!/engine\.mode === 'attach'/.test(src), '还有 attach（连接已有运行时）分支');
+    assert(!/engine\.mode === 'attach'/.test(src), '还Toplam attach (连接已有Çalışma zamanı)分支');
     assert(!/ATTACH_ENDPOINTS/.test(src), '还在探测外部模拟器的 adb 端口');
   });
 
-  test('设置页没有引擎模式下拉，也没有 MuMu / FydeOS 字段', () => {
+  test('Ayarlar页没有Motor模式下拉, 也没Toplam MuMu / FydeOS 字段', () => {
     const html = read('src', 'ui', 'index.html');
-    assert(!/setEngineMode/.test(html), '设置页仍有引擎模式下拉');
-    assert(!/value="mumu"|value="fydeos"|value="attach"/.test(html), '设置页仍有第三方选项');
-    assert(!/setMumuPath|setMumuMemGB|setMumuCores|setFydeosHost/.test(html), '设置页仍有第三方字段');
-    assert(/id="setEngineLabel"/.test(html), '设置页缺少只读的运行时说明');
+    assert(!/setEngineMode/.test(html), 'Ayarlar页仍有Motor模式下拉');
+    assert(!/value="mumu"|value="fydeos"|value="attach"/.test(html), 'Ayarlar页仍有第三方选项');
+    assert(!/setMumuPath|setMumuMemGB|setMumuCores|setFydeosHost/.test(html), 'Ayarlar页仍有第三方字段');
+    assert(/id="setEngineLabel"/.test(html), 'Ayarlar页缺少只读的Çalışma zamanı说明');
   });
 
   test('持久化层把残留的 mode / mumu* 字段就地改写', () => {
@@ -139,7 +139,7 @@ function touch(dir, rel, bytes = 8) {
     fs.rmSync(d, { recursive: true, force: true });
   });
 
-  test('守卫能认出 MuMu 的目录（nx_main / nx_device / nemu）', () => {
+  test('守卫能认出 MuMu 的目录 (nx_main / nx_device / nemu)', () => {
     for (const dirName of ['nx_main', 'nx_device', 'nemu']) {
       const d = tmpDir('guard-dir');
       fs.mkdirSync(path.join(d, dirName), { recursive: true });
@@ -159,7 +159,7 @@ function touch(dir, rel, bytes = 8) {
     fs.rmSync(d, { recursive: true, force: true });
   });
 
-  test('守卫不会误伤我们自己的运行时', () => {
+  test('守卫不会误伤我们自己的Çalışma zamanı', () => {
     const d = tmpDir('guard-src');
     touch(d, 'app/src/core/backends/builtin.js', 64);
     touch(d, 'app/src/core/resources.js', 64);
@@ -167,13 +167,13 @@ function touch(dir, rel, bytes = 8) {
     fs.rmSync(d, { recursive: true, force: true });
   });
 
-  test('守卫会拦第三方底座的适配器源码（防止又长回来）', () => {
+  test('守卫会拦第三方底座的适配器源码 (防止又长回来)', () => {
     const d = tmpDir('guard-adapter');
     touch(d, 'app/src/core/backends/mumu.js', 64);
     touch(d, 'app/src/core/backends/fydeos.js', 64);
     touch(d, 'app/src/core/mumu-compat.js', 64);
     const hits = findForbiddenSource(d);
-    assert.equal(hits.length, 3, `命中数 ${hits.length}（应为 3）`);
+    assert.equal(hits.length, 3, `命中数 ${hits.length} (应为 3)`);
     const r = assertStandalone(d, { label: '测试', exit: false });
     assert.equal(r.ok, false, '适配器源码没让守卫失败');
     fs.rmSync(d, { recursive: true, force: true });
@@ -187,7 +187,7 @@ function touch(dir, rel, bytes = 8) {
     fs.rmSync(d, { recursive: true, force: true });
   });
 
-  test('干净的运行时目录不报错', () => {
+  test('干净的Çalışma zamanı目录不报错', () => {
     const d = tmpDir('guard-clean');
     touch(d, 'runtime/emulator/emulator.exe', 64);
     touch(d, 'runtime/platform-tools/adb.exe', 64);
@@ -214,14 +214,14 @@ function touch(dir, rel, bytes = 8) {
     assert(/assertStandalone\(appDir/.test(src), 'msix.js 未接入守卫');
   });
 
-  test('打包只带 build/runtime（Google 运行时），没有别的模拟器目录', () => {
+  test('打包只带 build/runtime (Google Çalışma zamanı), 没有别的模拟器目录', () => {
     const yml = read('electron-builder.yml');
     const block = yml.slice(yml.indexOf('extraResources:'));
     const head = block.slice(0, block.indexOf('win:'));
     assert(!/mumu|ldplayer|bluestacks/i.test(head), 'extraResources 里出现了第三方模拟器');
-    assert(/build\/runtime/.test(head), 'extraResources 没有内置运行时');
+    assert(/build\/runtime/.test(head), 'extraResources 没有内置Çalışma zamanı');
   });
 
-  console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
+  console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
   process.exit(failed ? 1 : 0);
 })();

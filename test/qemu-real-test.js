@@ -34,7 +34,7 @@ function assert(c, m) { if (!c) throw new Error(m || '断言失败'); }
 
 (async () => {
   if (!QEMU) {
-    console.log('（跳过：本机未找到 QEMU，可安装后重试：winget install SoftwareFreedomConservancy.QEMU）');
+    console.log(' (跳过: 本机未找到 QEMU, 可安装后重试: winget install SoftwareFreedomConservancy.QEMU)');
     process.exit(0);
   }
   const ver = execFileSync(QEMU, ['--version'], { encoding: 'utf8' });
@@ -47,7 +47,7 @@ function assert(c, m) { if (!c) throw new Error(m || '断言失败'); }
   fs.mkdirSync(work, { recursive: true });
   const disk = path.join(work, 'test.qcow2');
 
-  await test('qemu-img 创建虚拟磁盘', () => {
+  await test('qemu-img 创建Sanal disk', () => {
     execFileSync(QEMU_IMG, ['create', '-f', 'qcow2', disk, '2G'], { timeout: 30000 });
     assert(fs.existsSync(disk) && fs.statSync(disk).size > 0, '磁盘未创建');
   });
@@ -66,25 +66,25 @@ function assert(c, m) { if (!c) throw new Error(m || '断言失败'); }
     proc.on('exit', (c) => { exited = c; });
 
     await new Promise((r) => setTimeout(r, 4000));
-    assert(exited === null, `QEMU 在 4s 内退出（code=${exited}），参数可能不被接受`);
+    assert(exited === null, `QEMU 在 4s 内Çıkış (code=${exited}), 参数可能不被接受`);
     assert(!proc.killed, '进程应存活');
 
-    await test('monitor 协议（真实 QEMU）', async () => {
+    await test('monitor 协议 (真实 QEMU)', async () => {
       const buf = await rt.monitorCmd('info status', { timeout: 5000 });
       assert(/running|paused/i.test(buf), `monitor 响应异常: ${buf.slice(-80)}`);
       await rt.monitorCmd('sendkey ctrl-alt-delete');
     });
 
-    await test('monitor 优雅退出', async () => {
+    await test('monitor 优雅Çıkış', async () => {
       await rt.monitorCmd('quit');
       await new Promise((r) => setTimeout(r, 1500));
-      assert(exited !== null || proc.killed, 'QEMU 应已退出');
+      assert(exited !== null || proc.killed, 'QEMU 应已Çıkış');
     });
     try { proc.kill(); } catch (_) { /* ignore */ }
   });
 
   console.log(out.join('\n'));
-  console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
+  console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
   try { fs.rmSync(process.env.APPDATA, { recursive: true, force: true }); } catch (_) { /* ignore */ }
   process.exit(failed ? 1 : 0);
 })();

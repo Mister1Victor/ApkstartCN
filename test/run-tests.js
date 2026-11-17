@@ -68,11 +68,11 @@ test('PNG 编码器输出合法签名与 IHDR', () => {
   assert(png.toString('ascii', 12, 16) === 'IHDR', 'IHDR chunk');
   assert(png.length > 50, '长度合理');
 });
-test('应用图标可按任意尺寸绘制', () => {
+test('Uygulama图标可按任意尺寸绘制', () => {
   for (const s of [16, 32, 64, 256]) {
     const png = drawAppIcon(s);
     const w = png.readUInt32BE(16);
-    assert(w === s, `宽度应为 ${s}，实际 ${w}`);
+    assert(w === s, `宽度应为 ${s}, 实际 ${w}`);
   }
 });
 
@@ -99,7 +99,7 @@ function findFixture() {
 
 const fixture = findFixture();
 if (fixture) {
-  console.log(`  （夹具：${fixture}）`);
+  console.log(`   (夹具: ${fixture})`);
   test('quickCheck 识别 PK 头', () => {
     assert(quickCheck(fixture) === true);
   });
@@ -111,8 +111,8 @@ if (fixture) {
       `启动 Activity 异常: ${meta.launchActivity}`);
   });
   test('解析出可用图标', () => {
-    assert(meta.iconPng && meta.iconPng.length > 100, '图标为空或过小');
-    assert(meta.label, '应用名为空');
+    assert(meta.iconPng && meta.iconPng.length > 100, '图标为空或过Küçük');
+    assert(meta.label, 'Uygulama名为空');
     console.log(`    ↳ ${meta.label} (${meta.package}) v${meta.versionName}`);
   });
   test('AXML 根节点是 manifest', () => {
@@ -128,17 +128,17 @@ if (fixture) {
     }
   });
 } else {
-  console.log('  （跳过：未找到 APK 夹具，可设置 APKSTART_TEST_APK）');
+  console.log('   (跳过: 未找到 APK 夹具, 可Ayarlar APKSTART_TEST_APK)');
 }
 
 // 合成 APK 的构造器放在 test/lib/make-apk.js：真实夹具缺失时也能覆盖解析栈，
 // 且 run-tests / auto-test 共用同一份（避免两处各写一套字节拼装）。
 const { buildApkBytes } = require('./lib/make-apk');
 
-console.log('\n[合成 APK：axml + apk 全链路]');
+console.log('\n[合成 APK: axml + apk 全链路]');
 {
   const { attrValue, ANDROID_NS } = require('../src/core/axml');
-  test('attrValue 的命名空间语义：传 null = 不限定，默认只认 android', () => {
+  test('attrValue 的命名空间语义: 传 null = 不限定, 默认只认 android', () => {
     const node = {
       attrs: [
         { ns: '', name: 'package', typed: 'com.a.b' },
@@ -157,10 +157,10 @@ console.log('\n[合成 APK：axml + apk 全链路]');
   fs.writeFileSync(tmp, buildApkBytes());
   try {
     const meta = parseApk(tmp);
-    test('包名：manifest 上的 package 是非命名空间属性', () => {
+    test('包名: manifest 上的 package 是非命名空间属性', () => {
       assert(meta.package === 'com.example.test', `实际 ${meta.package}`);
     });
-    test('应用名 / 版本 / SDK', () => {
+    test('Uygulama名 / 版本 / SDK', () => {
       assert(meta.label === 'TestApp', `label=${meta.label}`);
       assert(meta.versionName === '1.2.3', `versionName=${meta.versionName}`);
       assert(meta.versionCode === 7, `versionCode=${meta.versionCode}`);
@@ -173,7 +173,7 @@ console.log('\n[合成 APK：axml + apk 全链路]');
       assert(JSON.stringify(meta.abis) === '["arm64-v8a"]', JSON.stringify(meta.abis));
       assert(meta.iconFile === 'res/mipmap-hdpi/ic_launcher.png', `icon=${meta.iconFile}`);
       assert(meta.iconPng && meta.iconPng[0] === 0x89 && meta.iconPng[1] === 0x50, '图标应是 PNG');
-      assert(meta.sizeBytes === fs.statSync(tmp).size, '文件大小应回填');
+      assert(meta.sizeBytes === fs.statSync(tmp).size, '文件BüyükKüçük应回填');
     });
   } finally {
     try { fs.rmSync(tmp, { force: true }); } catch (_) { /* ignore */ }
@@ -190,16 +190,16 @@ console.log('\n[合成 APK：axml + apk 全链路]');
       ...(ori == null ? [] : [{ ns: ANDROID_NS, name: 'screenOrientation', typed: ori }]),
     ],
   });
-  test('屏幕方向：按 Activity 声明统计出应用天然方向', () => {
+  test('Ekran yönü: 按 Activity 声明统计出Uygulama天然方向', () => {
     // 红果那种「几十个 portrait + 一个 sensor 启动页」→ portrait
     const hongguo = [
       act('SplashActivity', 3), act('MainActivity', 1), act('ReaderActivity', 3),
       act('WebActivity', 1), act('DetailActivity', 1),
     ];
-    assert(detectOrientation(hongguo, hongguo[0]) === 'portrait', '多数声明 portrait 要判成竖屏');
+    assert(detectOrientation(hongguo, hongguo[0]) === 'portrait', '多数声明 portrait 要判成dikey');
     // 墨读那种单 Activity 明确 landscape
     const modu = [act('MainActivity', 2)];
-    assert(detectOrientation(modu, modu[0]) === 'landscape', '单 landscape 活动要判成横屏');
+    assert(detectOrientation(modu, modu[0]) === 'landscape', '单 landscape 活动要判成yatay');
     // 全 sensor / 全 unspecified → 无法判断，交给设置
     const sensorOnly = [act('A', 3), act('B', 11), act('C', 0), act('D', 14)];
     assert(detectOrientation(sensorOnly, sensorOnly[0]) === null, '全跟随重力时应返回 null');
@@ -208,10 +208,10 @@ console.log('\n[合成 APK：axml + apk 全链路]');
     const launcherWins = [act('Launcher', 2), act('P1', 1), act('P2', 1), act('P3', 1)];
     assert(detectOrientation(launcherWins, launcherWins[0]) === 'landscape', '启动 Activity 方向要加权');
     // reversePortrait / userLandscape 这类也要归到正确的一边
-    assert(detectOrientation([act('A', 7)], null) === 'portrait', 'reversePortrait 属于竖屏');
-    assert(detectOrientation([act('A', 12)], null) === 'landscape', 'userLandscape 属于横屏');
+    assert(detectOrientation([act('A', 7)], null) === 'portrait', 'reversePortrait 属于dikey');
+    assert(detectOrientation([act('A', 12)], null) === 'landscape', 'userLandscape 属于yatay');
   });
 }
 
-console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
+console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
 process.exit(failed ? 1 : 0);

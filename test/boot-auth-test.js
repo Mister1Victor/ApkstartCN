@@ -33,7 +33,7 @@ const adbDevices = (line) => `List of devices attached\n${line}\n`;
 
 (async () => {
   console.log('\n[adb 设备状态解析]');
-  test('unauthorized 与 authorized 必须能区分（get-state 分不清）', () => {
+  test('unauthorized 与 authorized 必须能区分 (get-state 分不清)', () => {
     assert.equal(parseDeviceState(adbDevices('emulator-5554\tunauthorized'), 'emulator-5554'), 'unauthorized');
     assert.equal(parseDeviceState(adbDevices('emulator-5554\tdevice'), 'emulator-5554'), 'device');
   });
@@ -42,11 +42,11 @@ const adbDevices = (line) => `List of devices attached\n${line}\n`;
     assert.equal(parseDeviceState(adbDevices('emulator-5554\tno permissions'), 'emulator-5554'), 'unauthorized');
     assert.equal(parseDeviceState(adbDevices(''), 'emulator-5554'), 'no-device');
   });
-  test('只认本 serial 的状态行，不被别的设备干扰', () => {
+  test('只认本 serial 的状态行, 不被别的设备干扰', () => {
     const out = adbDevices('emulator-5556\tdevice\nemulator-5554\tunauthorized');
     assert.equal(parseDeviceState(out, 'emulator-5554'), 'unauthorized');
   });
-  test('报错文本命中 unauthorized（含官方 ADB_VENDOR_KEYS 提示）', () => {
+  test('报错文本命中 unauthorized (含官方 ADB_VENDOR_KEYS 提示)', () => {
     assert.equal(isUnauthorizedError('error: device unauthorized.'), true);
     assert.equal(isUnauthorizedError("This adb server's $ADB_VENDOR_KEYS is not set. error: device unauthorized"), true);
     assert.equal(isUnauthorizedError('error: device offline'), false);
@@ -54,14 +54,14 @@ const adbDevices = (line) => `List of devices attached\n${line}\n`;
   });
 
   console.log('\n[pm path 解析 + 文件真实性校验]');
-  test('pm path 多分片（split APK）要全部解析出来', () => {
+  test('pm path 多分片 (split APK)要全部解析出来', () => {
     const out = 'package:/data/app/~~x/com.foo-1/base.apk\npackage:/data/app/~~x/com.foo-1/split_arm64.apk\n';
     assert.deepEqual(parsePmPaths(out), [
       '/data/app/~~x/com.foo-1/base.apk',
       '/data/app/~~x/com.foo-1/split_arm64.apk',
     ]);
   });
-  test('pm path 空输出 = 未安装', () => {
+  test('pm path 空输出 = Kurulu değil', () => {
     assert.deepEqual(parsePmPaths(''), []);
     assert.deepEqual(parsePmPaths('Error: package not found'), []);
   });
@@ -83,7 +83,7 @@ const adbDevices = (line) => `List of devices attached\n${line}\n`;
     };
     assert.equal(await c.isInstalled('com.foo'), true);
   });
-  await atest('多分片有一个丢失 → 判定未安装（启动不了）', async () => {
+  await atest('多分片有一个丢失 → 判定Kurulu değil (启动不了)', async () => {
     const c = Object.create(AdbClient.prototype);
     const seen = [];
     c.shell = async (cmd) => {
@@ -106,7 +106,7 @@ const adbDevices = (line) => `List of devices attached\n${line}\n`;
     const ok = await emu._saveViaAdb('adb');
     assert.equal(ok, false, '不健康时不允许保存');
   });
-  await atest('源码级：快照保存路径必须先过健康守卫', () => {
+  await atest('源码级: 快照保存路径必须先过健康守卫', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'emulator.js'), 'utf8');
     const fn = src.slice(src.indexOf('async _saveViaAdb('), src.indexOf('async _saveViaAdb(') + 700);
     assert.ok(/_adbGuestHealthy/.test(fn), '_saveViaAdb 必须先判 guest 健康');
@@ -114,23 +114,23 @@ const adbDevices = (line) => `List of devices attached\n${line}\n`;
     assert.ok(/_adbGuestHealthy/.test(stopFn), 'stop() 关机前也要判断健康');
     assert.ok(/invalidateSnapshot\(\)/.test(stopFn), '不健康关机要作废快照');
   });
-  await atest('源码级：开机探测要识别 unauthorized 并冷启动自愈', () => {
+  await atest('源码级: 开机探测要识别 unauthorized 并soğuk başlatma自愈', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'engine.js'), 'utf8');
     const boot = src.slice(src.indexOf('async bootEmulator('), src.indexOf('async bootEmulator(') + 4200);
     assert.ok(/isUnauthorizedError/.test(boot), '探测要按报错文本识别 unauthorized');
-    assert.ok(/deviceState\(\)/.test(boot), '探测要按 devices state 列二次确认');
+    assert.ok(/deviceState\(\)/.test(boot), '探测要按 devices state 列二次Onayla');
     assert.ok(/invalidateSnapshot\(\)/.test(boot), '命中授权卡住要作废旧快照');
-    assert.ok(/_coldBoot = true/.test(boot), '要强制冷启动以重新注入 adb 公钥');
-    assert.ok(/ADB_UNAUTHORIZED/.test(boot), '要给出准确诊断，不再误导成显卡问题');
+    assert.ok(/_coldBoot = true/.test(boot), '要强制soğuk başlatma以重新注入 adb 公钥');
+    assert.ok(/ADB_UNAUTHORIZED/.test(boot), '要给出准确诊断, 不再误导成显卡问题');
   });
   await atest('adb server 注入 ADB_VENDOR_KEYS 以对齐 host/guest 密钥', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'adb.js'), 'utf8');
     assert.ok(/ADB_VENDOR_KEYS/.test(src), '必须显式指定 adb 公钥目录');
   });
 
-  console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
+  console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => {
-  console.error('  异常：', e.stack || e.message);
+  console.error('  异常: ', e.stack || e.message);
   process.exit(1);
 });

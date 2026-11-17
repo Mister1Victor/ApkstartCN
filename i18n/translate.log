@@ -1,3 +1,15 @@
 к переводу: 8878
 1000/8878 (8.8 сег/сек)
 2000/8878 (8.8 сег/сек)
+3000/8878 (8.8 сег/сек)
+Traceback (most recent call last):
+  File "/workspace/scripts/i18n/translate.py", line 119, in <module>
+    main()
+  File "/workspace/scripts/i18n/translate.py", line 109, in main
+    save(d)
+  File "/workspace/scripts/i18n/translate.py", line 70, in save
+    os.replace(tmp, STRINGS)
+FileNotFoundError: [Errno 2] No such file or directory: '/workspace/i18n/strings.json.tmp' -> '/workspace/i18n/strings.json'
+18n/strings.json'
+nohup: ignoring input
+к переводу: 5818

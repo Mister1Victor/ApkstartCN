@@ -13,3 +13,6 @@ FileNotFoundError: [Errno 2] No such file or directory: '/workspace/i18n/strings
 18n/strings.json'
 nohup: ignoring input
 к переводу: 5818
+1000/5818 (8.7 сег/сек)
+2007/5818 (6.7 сег/сек)
+3011/5818 (7.1 сег/сек)
